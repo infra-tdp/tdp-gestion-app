@@ -14,8 +14,21 @@ if (!url) {
   process.exit(1);
 }
 
+// `pg` da prioridad al sslmode de la URL sobre el `ssl` explícito y
+// descartaría la CA; cuando aportamos CA, la quitamos de la URL para verificar
+// contra ella (misma lógica que src/lib/db/index.ts).
 const ca = process.env.DATABASE_CA_CERT?.replace(/\\n/g, "\n");
-const pool = new Pool({ connectionString: url, max: 1, ...(ca ? { ssl: { ca } } : {}) });
+let connStr = url;
+if (ca) {
+  try {
+    const u = new URL(connStr);
+    u.searchParams.delete("sslmode");
+    connStr = u.toString();
+  } catch {
+    /* URL no parseable: se deja tal cual */
+  }
+}
+const pool = new Pool({ connectionString: connStr, max: 1, ...(ca ? { ssl: { ca } } : {}) });
 
 // La BD puede tardar unos segundos en aceptar conexiones tras el deploy
 for (let attempt = 1; attempt <= 15; attempt++) {

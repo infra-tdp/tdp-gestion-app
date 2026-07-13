@@ -18,9 +18,25 @@ GRANT CONNECT, TEMPORARY ON DATABASE tdp_gestion TO tdp;
 ```
 
 Como owner, `tdp` crea solo las tablas (migraciones en el arranque). La URL
-resultante va en `DATABASE_URL` — host y puerto los da el panel, y
-`?sslmode=require` es obligatorio. Asegúrate también de que la IP del server
-de Coolify está permitida en el firewall de la BD gestionada (Allowed IPs).
+resultante va en `DATABASE_URL` — host y puerto los da el panel.
+
+**TLS (obligatorio en la gestionada).** `node-postgres` trata `sslmode=require`
+como verificación completa (`verify-full`) y la BD usa una CA privada que no
+está en el almacén del contenedor. Dos opciones:
+
+- **Recomendado**: pega la CA (panel de UpCloud → *CA certificate*) en la
+  variable `DATABASE_CA_CERT` y deja `?sslmode=require` en la URL → verifica
+  contra esa CA.
+- **Rápido**: usa `?sslmode=no-verify` en la URL (cifra, no verifica el cert).
+
+Con `?sslmode=require` **sin** `DATABASE_CA_CERT` el arranque falla con
+`self-signed certificate in certificate chain`.
+
+Asegúrate también de que la IP del server de Coolify está permitida en el
+firewall de la BD gestionada (Allowed IPs) y de conectar a **una BD donde el
+usuario pueda crear tablas** (owner de la base, o `GRANT CREATE ON SCHEMA
+public`); en `defaultdb` con un usuario secundario suele dar
+`permission denied for schema public`.
 
 ## 1. Crear el recurso
 
