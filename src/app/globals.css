@@ -1,0 +1,210 @@
+@import "tailwindcss";
+
+/* =============================================================================
+   TDP Gestión — Tokens de diseño (Guía UI/UX TDP · Uso general)
+   Valores hex EXACTOS de la guía — sin sustituciones.
+   ============================================================================= */
+@theme {
+  /* Colores de marca */
+  --color-primary: #5dff00;      /* CTAs, estados activos, KPIs positivos, foco */
+  --color-logo-start: #59ff00;   /* SOLO logotipo */
+  --color-logo-end: #eaff00;     /* SOLO logotipo */
+  --color-danger: #ff3700;       /* Errores, alertas, acciones destructivas */
+  --color-warning: #ffa500;      /* Advertencias, indicadores de nivel */
+
+  /* Superficies */
+  --color-bg: #0e0e0e;           /* Fondo principal, navbar, sidebar */
+  --color-card: #1f1f1f;         /* Tarjetas, paneles, modales */
+  --color-bg-tertiary: #181818;  /* Secciones oscuras sutiles, filas alternadas */
+  --color-bg-light: #f0f0f0;     /* Secciones de contraste claras */
+
+  /* Texto */
+  --color-text: #ffffff;
+  --color-muted: #acacac;        /* Secundario, timestamps, desactivados */
+  --color-text-dark: #333333;    /* Cuerpo sobre fondos claros */
+  --color-icon-grey: #c8c8c8;
+
+  /* Bordes */
+  --color-border-dark: #444444;
+
+  /* Radios (guía: nunca píldora en CTAs) */
+  --radius-btn: 3px;
+  --radius-card: 4px;
+  --radius-input: 8px;
+  --radius-badge: 3px;
+
+  /* Tipografía */
+  --font-headline: var(--font-barlow), "Barlow Condensed", Anton, sans-serif;
+  --font-body: var(--font-inter), Inter, Roboto, sans-serif;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: 15px;
+}
+
+/* Titulares: Barlow Condensed ExtraBold Italic — nunca Regular ni sin itálica */
+.headline {
+  font-family: var(--font-headline);
+  font-weight: 800;
+  font-style: italic;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+}
+
+/* Tarjeta oscura con separador de marca (borde inferior 2px verde) */
+.tdp-card {
+  background-color: var(--color-card);
+  border-radius: var(--radius-card);
+  border: 1px solid var(--color-border-dark);
+  border-bottom: 2px solid var(--color-primary);
+}
+
+.tdp-card-plain {
+  background-color: var(--color-card);
+  border-radius: var(--radius-card);
+  border: 1px solid var(--color-border-dark);
+}
+
+/* Foco de input: borde verde + ring rgba(93,255,0,.2) */
+.tdp-input {
+  background-color: var(--color-card);
+  border: 1px solid var(--color-border-dark);
+  border-radius: var(--radius-input);
+  color: var(--color-text);
+  padding: 0.55rem 0.8rem;
+  font-size: 15px;
+  width: 100%;
+  outline: none;
+  transition: border-color 120ms, box-shadow 120ms;
+}
+.tdp-input::placeholder { color: var(--color-muted); }
+.tdp-input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(93, 255, 0, 0.2);
+}
+
+/* Botones (radio 2–4px, NUNCA píldora) */
+.btn-primary {
+  background-color: var(--color-primary);
+  color: var(--color-bg);
+  font-weight: 700;
+  border-radius: var(--radius-btn);
+  padding: 0.55rem 1.1rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: none;
+  cursor: pointer;
+  transition: filter 120ms;
+}
+.btn-primary:hover { filter: brightness(1.08); }
+.btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.btn-outline {
+  background-color: var(--color-card);
+  color: var(--color-primary);
+  font-weight: 700;
+  border: 1.5px solid var(--color-primary);
+  border-radius: var(--radius-btn);
+  padding: 0.5rem 1.05rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  transition: background-color 120ms;
+}
+.btn-outline:hover { background-color: rgba(93, 255, 0, 0.08); }
+
+.btn-dark {
+  background-color: var(--color-card);
+  color: var(--color-text);
+  font-weight: 700;
+  border: 1px solid var(--color-border-dark);
+  border-radius: var(--radius-btn);
+  padding: 0.5rem 1.05rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  transition: border-color 120ms;
+}
+.btn-dark:hover { border-color: var(--color-muted); }
+
+.btn-danger {
+  background-color: var(--color-card);
+  color: var(--color-danger);
+  font-weight: 700;
+  border: 1.5px solid var(--color-danger);
+  border-radius: var(--radius-btn);
+  padding: 0.5rem 1.05rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  transition: background-color 120ms;
+}
+.btn-danger:hover { background-color: rgba(255, 55, 0, 0.1); }
+
+/* Badges (radio 3px) */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border-radius: var(--radius-badge);
+  font-weight: 700;
+  font-size: 11px;
+  padding: 0.15rem 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.badge-success { background-color: var(--color-primary); color: var(--color-bg); }
+.badge-danger { background-color: var(--color-danger); color: #ffffff; }
+.badge-warning { background-color: var(--color-warning); color: var(--color-bg); }
+.badge-neutral { background-color: var(--color-border-dark); color: #ffffff; }
+.badge-outline {
+  background-color: transparent;
+  color: var(--color-muted);
+  border: 1px solid var(--color-border-dark);
+}
+
+/* Tablas de datos: cabecera oscura, filas alternadas #1F1F1F/#181818 */
+.tdp-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.tdp-table thead th {
+  background-color: var(--color-bg);
+  color: var(--color-muted);
+  text-align: left;
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.6rem 0.9rem;
+  border-bottom: 1px solid var(--color-border-dark);
+}
+.tdp-table tbody tr:nth-child(odd) { background-color: var(--color-card); }
+.tdp-table tbody tr:nth-child(even) { background-color: var(--color-bg-tertiary); }
+.tdp-table tbody td { padding: 0.6rem 0.9rem; vertical-align: middle; }
+.tdp-table tbody tr { border-bottom: 1px solid rgba(68, 68, 68, 0.4); }
+
+/* Log viewer */
+.tdp-log {
+  background-color: #0a0a0a;
+  border: 1px solid var(--color-border-dark);
+  border-radius: var(--radius-card);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+  padding: 1rem;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--color-icon-grey);
+}
+
+/* Scrollbar sutil */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--color-bg); }
+::-webkit-scrollbar-thumb { background: var(--color-border-dark); border-radius: 5px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-muted); }

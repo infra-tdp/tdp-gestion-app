@@ -1,0 +1,100 @@
+# =============================================================================
+#  TDP Gestión en Coolify — app (build desde este repo en cada push) + PostgreSQL.
+#
+#  En Coolify: + New Resource → Docker Compose desde este repo (GitHub App).
+#  Coolify construye la imagen con el Dockerfile en cada push a main (auto-deploy)
+#  y enruta por Traefik al servicio 'app' según el dominio fijado en la UI.
+#  Las variables van por Environment/Shared Variables de Coolify (ver .env.example).
+# =============================================================================
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: "postgres://${POSTGRES_USER:-tdp}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-tdp_gestion}"
+      AUTH_SECRET: "${AUTH_SECRET}"
+      ADMIN_EMAIL: "${ADMIN_EMAIL}"
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD}"
+      # --- UpCloud (sub-cuenta API, la misma que usa tofu) ---
+      UPCLOUD_USERNAME: "${UPCLOUD_USERNAME:-}"
+      UPCLOUD_PASSWORD: "${UPCLOUD_PASSWORD:-}"
+      # --- OpenTofu (estado en Postgres del repo de infra) ---
+      PG_CONN_STR: "${PG_CONN_STR:-}"
+      # --- GitHub ---
+      GITHUB_TOKEN: "${GITHUB_TOKEN:-}"
+      GITHUB_ORG: "${GITHUB_ORG:-infra-tdp}"
+      WEB_REPO: "${WEB_REPO:-tdp-app-wordpress-prod}"
+      INFRA_REPO: "${INFRA_REPO:-tdp-tienda-infra}"
+      GHCR_IMAGE: "${GHCR_IMAGE:-ghcr.io/infra-tdp/tdp-app-wordpress-prod}"
+      # --- Coolify API (crear/destruir stagings) ---
+      COOLIFY_URL: "${COOLIFY_URL:-}"
+      COOLIFY_TOKEN: "${COOLIFY_TOKEN:-}"
+      COOLIFY_PROJECT_UUID: "${COOLIFY_PROJECT_UUID:-}"
+      COOLIFY_SERVER_UUID: "${COOLIFY_SERVER_UUID:-}"
+      COOLIFY_GITHUB_APP_UUID: "${COOLIFY_GITHUB_APP_UUID:-}"
+      COOLIFY_ENVIRONMENT_NAME: "${COOLIFY_ENVIRONMENT_NAME:-staging}"
+      # --- Backups S3 (restore de BD temporal en staging) ---
+      S3_ENDPOINT: "${S3_ENDPOINT:-}"
+      S3_REGION: "${S3_REGION:-}"
+      S3_BUCKET_BACKUPS: "${S3_BUCKET_BACKUPS:-}"
+      S3_BACKUP_ACCESS_KEY: "${S3_BACKUP_ACCESS_KEY:-}"
+      S3_BACKUP_SECRET_KEY: "${S3_BACKUP_SECRET_KEY:-}"
+      S3_BACKUPS_PREFIX: "${S3_BACKUPS_PREFIX:-db/}"
+      BACKUP_GPG_PASSPHRASE: "${BACKUP_GPG_PASSPHRASE:-}"
+      # --- Media S3 de la web (para stagings) ---
+      S3_BUCKET_MEDIA: "${S3_BUCKET_MEDIA:-}"
+      TDP_CDN_DOMAIN: "${TDP_CDN_DOMAIN:-}"
+      # --- Staging ---
+      STAGING_DOMAIN_BASE: "${STAGING_DOMAIN_BASE:-staging.tallerdelpatinete.es}"
+      STAGING_DEVBOX_HOST: "${STAGING_DEVBOX_HOST:-}"
+      STAGING_DEVBOX_PORT_BASE: "${STAGING_DEVBOX_PORT_BASE:-22000}"
+      STAGING_GIT_TOKEN: "${STAGING_GIT_TOKEN:-}"
+      STAGING_COMPOSE_LOCATION: "${STAGING_COMPOSE_LOCATION:-/docker-compose.staging.yaml}"
+      # --- Monitores por defecto (Nombre|URL separados por comas) ---
+      MONITOR_DEFAULTS: "${MONITOR_DEFAULTS:-}"
+      # --- Asistente IA ---
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+    volumes:
+      - tofu_data:/data
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - app
+      - coolify
+    labels:
+      - "traefik.docker.network=coolify"
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER:-tdp}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      POSTGRES_DB: "${POSTGRES_DB:-tdp_gestion}"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    networks: [app]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tdp} -d ${POSTGRES_DB:-tdp_gestion}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pg_data:
+  tofu_data:
+
+networks:
+  app:
+  coolify:
+    external: true
