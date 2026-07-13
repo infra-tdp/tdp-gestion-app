@@ -8,11 +8,16 @@ import * as schema from "./schema";
  */
 const globalForDb = globalThis as unknown as { __tdpPool?: Pool };
 
+// CA de la PostgreSQL gestionada (UpCloud): si se define, verificación TLS
+// completa contra ella; si no, manda el sslmode de la URL.
+const ca = process.env.DATABASE_CA_CERT?.replace(/\\n/g, "\n");
+
 const pool =
   globalForDb.__tdpPool ??
   new Pool({
     connectionString: process.env.DATABASE_URL,
     max: 10,
+    ...(ca ? { ssl: { ca } } : {}),
   });
 
 if (process.env.NODE_ENV !== "production") globalForDb.__tdpPool = pool;

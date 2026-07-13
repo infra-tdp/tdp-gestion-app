@@ -14,7 +14,8 @@ if (!url) {
   process.exit(1);
 }
 
-const pool = new Pool({ connectionString: url, max: 1 });
+const ca = process.env.DATABASE_CA_CERT?.replace(/\\n/g, "\n");
+const pool = new Pool({ connectionString: url, max: 1, ...(ca ? { ssl: { ca } } : {}) });
 
 // La BD puede tardar unos segundos en aceptar conexiones tras el deploy
 for (let attempt = 1; attempt <= 15; attempt++) {

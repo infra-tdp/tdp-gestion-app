@@ -1,10 +1,15 @@
 # =============================================================================
-#  TDP Gestión en Coolify — app (build desde este repo en cada push) + PostgreSQL.
+#  TDP Gestión en Coolify — app (build desde este repo en cada push).
 #
 #  En Coolify: + New Resource → Docker Compose desde este repo (GitHub App).
 #  Coolify construye la imagen con el Dockerfile en cada push a main (auto-deploy)
 #  y enruta por Traefik al servicio 'app' según el dominio fijado en la UI.
 #  Las variables van por Environment/Shared Variables de Coolify (ver .env.example).
+#
+#  BD: la app usa la PostgreSQL GESTIONADA de UpCloud vía DATABASE_URL (con
+#  ?sslmode=require). El servicio 'db' de abajo NO se levanta por defecto —
+#  es solo para desarrollo local: docker compose --profile local-db up
+#  (y entonces DATABASE_URL=postgres://tdp:PASS@db:5432/tdp_gestion).
 # =============================================================================
 services:
   app:
@@ -13,7 +18,8 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
-      DATABASE_URL: "postgres://${POSTGRES_USER:-tdp}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-tdp_gestion}"
+      DATABASE_URL: "${DATABASE_URL}"
+      DATABASE_CA_CERT: "${DATABASE_CA_CERT:-}"
       AUTH_SECRET: "${AUTH_SECRET}"
       ADMIN_EMAIL: "${ADMIN_EMAIL}"
       ADMIN_PASSWORD: "${ADMIN_PASSWORD}"
@@ -58,9 +64,6 @@ services:
       ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
     volumes:
       - tofu_data:/data
-    depends_on:
-      db:
-        condition: service_healthy
     networks:
       - app
       - coolify
@@ -73,7 +76,10 @@ services:
       timeout: 5s
       retries: 3
 
+  # Solo desarrollo local (docker compose --profile local-db up); en producción
+  # la BD es la gestionada de UpCloud y este servicio no arranca.
   db:
+    profiles: ["local-db"]
     image: postgres:17-alpine
     restart: unless-stopped
     environment:

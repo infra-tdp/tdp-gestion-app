@@ -2,7 +2,25 @@
 
 La app se **construye desde el código en cada push** (sin imagen inmutable):
 Coolify clona este repo, hace build con el `Dockerfile` vía el
-`docker-compose.yaml` y levanta app + PostgreSQL.
+`docker-compose.yaml` y levanta la app. La BD es la **PostgreSQL gestionada
+de UpCloud** (el compose no levanta ninguna; su servicio `db` es solo para
+desarrollo local con `--profile local-db`).
+
+## 0. Base de datos (una vez, en la PostgreSQL gestionada)
+
+Conéctate con el usuario admin del panel de UpCloud y crea usuario y BD:
+
+```sql
+CREATE ROLE tdp WITH LOGIN PASSWORD '...';
+CREATE DATABASE tdp_gestion OWNER tdp ENCODING 'UTF8' TEMPLATE template0;
+REVOKE ALL ON DATABASE tdp_gestion FROM PUBLIC;
+GRANT CONNECT, TEMPORARY ON DATABASE tdp_gestion TO tdp;
+```
+
+Como owner, `tdp` crea solo las tablas (migraciones en el arranque). La URL
+resultante va en `DATABASE_URL` — host y puerto los da el panel, y
+`?sslmode=require` es obligatorio. Asegúrate también de que la IP del server
+de Coolify está permitida en el firewall de la BD gestionada (Allowed IPs).
 
 ## 1. Crear el recurso
 
@@ -18,7 +36,7 @@ Environment Variables del recurso. Mínimo imprescindible para arrancar:
 
 | Variable | Para qué |
 |---|---|
-| `POSTGRES_PASSWORD` | BD del compose |
+| `DATABASE_URL` | PostgreSQL gestionada de UpCloud (`postgres://tdp:PASS@HOST:PUERTO/tdp_gestion?sslmode=require`) |
 | `AUTH_SECRET` | firma de sesiones (`openssl rand -base64 48`) |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | primer usuario ADMIN (solo si la BD está vacía) |
 
