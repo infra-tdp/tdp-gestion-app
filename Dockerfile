@@ -42,6 +42,11 @@ COPY --from=build --chown=tdp:tdp /app/.next/standalone ./
 COPY --from=build --chown=tdp:tdp /app/.next/static ./.next/static
 COPY --from=build --chown=tdp:tdp /app/drizzle ./drizzle
 COPY --from=build --chown=tdp:tdp /app/scripts/migrate.mjs ./scripts/migrate.mjs
+# El build standalone de Next solo traza los ficheros de drizzle-orm que importa
+# la app, y deja fuera el subpath del migrador (drizzle-orm/node-postgres/migrator)
+# que usa scripts/migrate.mjs. Copiamos el paquete completo —no tiene dependencias
+# propias— para que el migrador resuelva. (pg ya entra vía serverExternalPackages.)
+COPY --from=build --chown=tdp:tdp /app/node_modules/drizzle-orm ./node_modules/drizzle-orm
 COPY --from=build --chown=tdp:tdp /app/docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh
 
