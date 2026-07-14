@@ -17,6 +17,8 @@ const PERMISSIONS = {
   "tofu.view": ["ADMIN", "INFRA", "DEV"],
   "tofu.plan": ["ADMIN", "INFRA"],
   "tofu.apply": ["ADMIN", "INFRA"],
+  "apps.view": ["ADMIN", "INFRA", "DEV"],
+  "apps.manage": ["ADMIN", "INFRA"],
   "monitors.view": ["ADMIN", "INFRA", "DEV", "VIEWER"],
   "monitors.manage": ["ADMIN", "INFRA"],
   "staging.view": ["ADMIN", "INFRA", "DEV"],

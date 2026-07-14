@@ -7,11 +7,12 @@ import { Sidebar } from "@/components/sidebar";
 
 export const dynamic = "force-dynamic";
 
-const NAV: { href: string; label: string; icon: "dashboard" | "server" | "workflow" | "radio" | "staging" | "users" | "keys" | "bot" | "bell"; permission?: Permission }[] = [
+const NAV: { href: string; label: string; icon: "dashboard" | "server" | "workflow" | "radio" | "apps" | "staging" | "users" | "keys" | "bot" | "bell"; permission?: Permission }[] = [
   { href: "/", label: "Dashboard", icon: "dashboard" },
   { href: "/infra/nodes", label: "Nodos", icon: "server", permission: "infra.view" },
   { href: "/infra/tofu", label: "OpenTofu", icon: "workflow", permission: "tofu.view" },
   { href: "/infra/monitors", label: "Disponibilidad", icon: "radio", permission: "monitors.view" },
+  { href: "/infra/apps", label: "Apps", icon: "apps", permission: "apps.view" },
   { href: "/staging", label: "Staging devs", icon: "staging", permission: "staging.view" },
   { href: "/notificaciones", label: "Notificaciones", icon: "bell" },
   { href: "/asistente", label: "Asistente IA", icon: "bot", permission: "ai.use" },
