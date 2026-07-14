@@ -68,22 +68,24 @@ El resto activa módulos según se configuren (la UI avisa de qué falta):
 
 ## 3. Dominio
 
-La ruta de Traefik va **explícita en el `docker-compose.yaml`** (label `Host`),
-no por el campo "Domains" de la UI. Motivo: para servicios de compose, Coolify
-no siempre inyecta las labels de Traefik y el proxy responde `404 page not
-found`. El compose enruta el entrypoint `http` (:80) al puerto 3000 del
-contenedor; el TLS lo termina Cloudflare (igual que la web).
+Mismo patrón que `tdp-app-wordpress-prod` (que ya despliega bien): Coolify
+inyecta el router de Traefik **desde el campo "Domains for app" de la UI** y
+enruta al puerto que el servicio expone. Por eso el compose:
 
-- Pon `APP_DOMAIN=gestion.tallerdelpatinete.es` en las variables del recurso
-  (por defecto ya usa ese valor).
-- **Deja VACÍO el campo "Domains" del servicio `app` en la UI de Coolify** para
-  no crear un router duplicado con la misma regla `Host`.
+- **expone** el puerto de la app: `expose: ["3000"]`;
+- une el contenedor a la red `coolify` (donde vive Traefik) con la label
+  `traefik.docker.network=coolify`.
+
+Configuración en Coolify:
+
+- **"Domains for app"** = `http://gestion.tallerdelpatinete.es` (con `http://`;
+  el TLS lo termina Cloudflare, igual que la web). NO lo dejes vacío.
 - Túnel Cloudflare: `gestion.tallerdelpatinete.es → http://<server_coolify>:80`
-  (o el LB de UpCloud que ya usa preprod). Traefik enruta por el `Host`.
+  (o el LB de UpCloud que ya usa preprod).
 
-Si vuelve a salir `404 page not found`, es Traefik sin ruta para ese host:
-revisa que el contenedor esté en la red `coolify` y que las labels de arriba
-existan (el 404 lo devuelve Traefik, no la app).
+Si sale `404 page not found`, es Traefik sin ruta para ese host: revisa que el
+"Domains for app" esté puesto, que el servicio exponga `3000` y que el
+contenedor esté en la red `coolify` (el 404 lo devuelve Traefik, no la app).
 
 Las migraciones se aplican solas en cada arranque (`docker-entrypoint.sh`) y
 `/api/health` es el healthcheck.

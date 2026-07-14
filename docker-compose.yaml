@@ -64,19 +64,17 @@ services:
       ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
     volumes:
       - tofu_data:/data
+    # Mismo patrón que el compose que ya despliega bien (tdp-app-wordpress-prod,
+    # servicio nginx): el contenedor EXPONE su puerto y se une a la red 'coolify'
+    # (donde vive Traefik). Coolify inyecta el router de Traefik desde el campo
+    # "Domains for app" de la UI y enruta al puerto expuesto. NO se ponen labels
+    # de router manuales ni se deja vacío el Domains.
+    expose:
+      - "3000"
     networks:
       - app
       - coolify
-    # Ruta de Traefik EXPLÍCITA (Coolify no la inyecta de forma fiable para
-    # servicios de compose): el TLS lo termina Cloudflare, así que enrutamos por
-    # el entrypoint http (:80) al puerto 3000 del contenedor. El dominio se toma
-    # de APP_DOMAIN (con valor por defecto). Deja VACÍO el campo "Domains" del
-    # servicio en la UI de Coolify para no duplicar router.
     labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.tdp-gestion.rule=Host(`${APP_DOMAIN:-gestion.tallerdelpatinete.es}`)"
-      - "traefik.http.routers.tdp-gestion.entrypoints=http"
-      - "traefik.http.services.tdp-gestion.loadbalancer.server.port=3000"
       - "traefik.docker.network=coolify"
     security_opt: [no-new-privileges:true]
     healthcheck:
