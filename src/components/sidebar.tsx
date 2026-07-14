@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   Radio,
   Server,
+  ShieldCheck,
   Users,
   Workflow,
 } from "lucide-react";
@@ -26,6 +27,7 @@ const ICONS = {
   apps: Boxes,
   staging: GitPullRequest,
   users: Users,
+  roles: ShieldCheck,
   keys: KeyRound,
   bot: Bot,
   bell: Bell,

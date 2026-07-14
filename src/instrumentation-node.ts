@@ -7,6 +7,7 @@
  *    así que un scheduler en proceso es suficiente y no necesita Redis.
  */
 import { ensureAdminSeed } from "@/lib/auth/actions";
+import { reloadRbac } from "@/lib/auth/rbac";
 import { monitorsTick, pruneOldChecks } from "@/lib/infra/monitors";
 import { expireStagingEnvs } from "@/lib/staging/orchestrator";
 import { db, schema } from "@/lib/db";
@@ -20,6 +21,7 @@ export async function startup(): Promise<void> {
   try {
     await ensureAdminSeed();
     await seedDefaultMonitors();
+    await reloadRbac(); // precarga la matriz de permisos (defaults + overrides de BD)
   } catch (err) {
     console.error("[startup] seed falló (¿migraciones pendientes?):", err);
   }
