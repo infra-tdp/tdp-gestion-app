@@ -1,13 +1,13 @@
 import { and, count, eq, isNull, or } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { requireUser } from "@/lib/auth/rbac";
-import { hasPermission, type Permission } from "@/lib/auth/rbac";
+import { ensureRbacLoaded, hasPermission, type Permission } from "@/lib/auth/rbac";
 import { logoutAction } from "@/lib/auth/actions";
 import { Sidebar } from "@/components/sidebar";
 
 export const dynamic = "force-dynamic";
 
-const NAV: { href: string; label: string; icon: "dashboard" | "server" | "workflow" | "radio" | "apps" | "staging" | "users" | "keys" | "bot" | "bell"; permission?: Permission }[] = [
+const NAV: { href: string; label: string; icon: "dashboard" | "server" | "workflow" | "radio" | "apps" | "staging" | "users" | "roles" | "keys" | "bot" | "bell"; permission?: Permission }[] = [
   { href: "/", label: "Dashboard", icon: "dashboard" },
   { href: "/infra/nodes", label: "Nodos", icon: "server", permission: "infra.view" },
   { href: "/infra/tofu", label: "OpenTofu", icon: "workflow", permission: "tofu.view" },
@@ -18,10 +18,12 @@ const NAV: { href: string; label: string; icon: "dashboard" | "server" | "workfl
   { href: "/asistente", label: "Asistente IA", icon: "bot", permission: "ai.use" },
   { href: "/settings/ssh-keys", label: "Claves SSH", icon: "keys" },
   { href: "/admin/users", label: "Usuarios", icon: "users", permission: "users.manage" },
+  { href: "/admin/roles", label: "Roles y permisos", icon: "roles", permission: "roles.manage" },
 ];
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
+  await ensureRbacLoaded();
   const items = NAV.filter((i) => !i.permission || hasPermission(user.role, i.permission));
 
   const [unreadRow] = await db
