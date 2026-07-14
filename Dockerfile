@@ -27,8 +27,13 @@ ENV NODE_ENV=production \
 # git (clonado del repo de infra) + tofu (alineado con el CI de tdp-tienda-infra)
 ARG TOFU_VERSION=1.10.6
 ARG TARGETARCH=amd64
+# La descarga de tofu desde GitHub es el único paso del build que depende de un
+# servicio externo; con reintentos para que un 5xx/429 puntual de GitHub no tumbe
+# el deploy entero (era un wget a un solo intento).
 RUN apk add --no-cache git ca-certificates wget unzip \
-    && wget -q "https://github.com/opentofu/opentofu/releases/download/v${TOFU_VERSION}/tofu_${TOFU_VERSION}_linux_${TARGETARCH}.zip" -O /tmp/tofu.zip \
+    && wget -q --tries=5 --waitretry=3 --timeout=30 --retry-connrefused \
+         --retry-on-http-error=408,429,500,502,503,504 \
+         "https://github.com/opentofu/opentofu/releases/download/v${TOFU_VERSION}/tofu_${TOFU_VERSION}_linux_${TARGETARCH}.zip" -O /tmp/tofu.zip \
     && unzip -q /tmp/tofu.zip -d /usr/local/bin tofu \
     && chmod +x /usr/local/bin/tofu \
     && rm /tmp/tofu.zip \
