@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   Bell,
   Bot,
+  Boxes,
   GitPullRequest,
   KeyRound,
   LayoutDashboard,
@@ -22,6 +23,7 @@ const ICONS = {
   server: Server,
   workflow: Workflow,
   radio: Radio,
+  apps: Boxes,
   staging: GitPullRequest,
   users: Users,
   keys: KeyRound,

@@ -107,6 +107,12 @@ export async function startTofuRun(params: {
   stack: string;
   action: "plan" | "apply";
   userId: number;
+  /**
+   * Hook opcional que se ejecuta DESPUÉS del sync (git reset --hard) y ANTES de
+   * init/plan/apply. Sirve para escribir ficheros generados en el stack (p.ej.
+   * apps.auto.tfvars.json del registro de apps) que el reset acaba de limpiar.
+   */
+  prepare?: (stackDir: string) => Promise<void>;
 }): Promise<number> {
   const stack = safeStack(params.stack);
   if (runningStacks.has(stack)) {
@@ -119,7 +125,9 @@ export async function startTofuRun(params: {
     .returning({ id: schema.tofuRuns.id });
 
   runningStacks.add(stack);
-  void executeRun(row.id, stack, params.action).finally(() => runningStacks.delete(stack));
+  void executeRun(row.id, stack, params.action, params.prepare).finally(() =>
+    runningStacks.delete(stack),
+  );
   return row.id;
 }
 
@@ -130,7 +138,12 @@ async function appendLog(runId: number, chunk: string): Promise<void> {
     .where(eq(schema.tofuRuns.id, runId));
 }
 
-async function executeRun(runId: number, stack: string, action: "plan" | "apply"): Promise<void> {
+async function executeRun(
+  runId: number,
+  stack: string,
+  action: "plan" | "apply",
+  prepare?: (stackDir: string) => Promise<void>,
+): Promise<void> {
   // Buffer de log con flush periódico para no castigar la BD
   let buffer = "";
   const flush = async () => {
@@ -154,6 +167,12 @@ async function executeRun(runId: number, stack: string, action: "plan" | "apply"
     await db.update(schema.tofuRuns).set({ gitSha: sha }).where(eq(schema.tofuRuns.id, runId));
 
     const stackDir = path.join(repoDir(), LIVE_DIR, stack);
+
+    if (prepare) {
+      onOutput("\n[prepare] generando ficheros del stack (registro de apps)…\n");
+      await prepare(stackDir);
+    }
+
     const env: Record<string, string | undefined> = {
       PG_CONN_STR: process.env.PG_CONN_STR,
       UPCLOUD_USERNAME: process.env.UPCLOUD_USERNAME,

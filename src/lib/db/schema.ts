@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
   integer,
@@ -153,6 +154,36 @@ export const notifications = pgTable("notifications", {
   read: boolean("read").notNull().default(false),
   meta: jsonb("meta"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/* --------------------------- Registro de apps ----------------------------- */
+
+/**
+ * Apps gestionadas: alimentan el enrutado por Host del LB (var.apps del stack
+ * coolify-prod en tdp-tienda-infra). `nodes` = claves de var.nodes donde vive la
+ * app; gestion renderiza apps.auto.tfvars.json desde aquí y lanza tofu.
+ */
+export const apps = pgTable("apps", {
+  id: serial("id").primaryKey(),
+  /** Slug corto y único: clave en var.apps y nombre del backend/regla del LB */
+  slug: varchar("slug", { length: 60 }).notNull().unique(),
+  name: varchar("name", { length: 120 }).notNull(),
+  /** Dominio público (cabecera Host que enruta el LB) */
+  host: varchar("host", { length: 253 }).notNull(),
+  /** Repositorio git de la app (para desplegar desde gestion en fases siguientes) */
+  repo: text("repo"),
+  /** Puerto interno del contenedor (Traefik → :port) */
+  port: integer("port").notNull().default(3000),
+  /** Claves de nodo (var.nodes) donde la app está desplegada, p.ej. ["1","2"] */
+  nodes: jsonb("nodes").notNull().default(sql`'[]'::jsonb`),
+  /** Ruta de salud para el health check por app del LB */
+  healthPath: varchar("health_path", { length: 200 }).notNull().default("/api/health"),
+  /** UUID del recurso en Coolify (cuando se despliegue desde gestion) */
+  coolifyAppUuid: varchar("coolify_app_uuid", { length: 64 }),
+  enabled: boolean("enabled").notNull().default(true),
+  createdBy: integer("created_by").references(() => users.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 /* ------------------------------- Ajustes ---------------------------------- */
