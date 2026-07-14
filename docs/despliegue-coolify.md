@@ -68,9 +68,22 @@ El resto activa módulos según se configuren (la UI avisa de qué falta):
 
 ## 3. Dominio
 
-Domain del servicio `app`: `http://gestion.tallerdelpatinete.es` (el TLS lo da
-Cloudflare, igual que la web). Ruta del túnel en el control host:
-`gestion.tallerdelpatinete.es → http://<IP_privada_server_coolify>:80`.
+La ruta de Traefik va **explícita en el `docker-compose.yaml`** (label `Host`),
+no por el campo "Domains" de la UI. Motivo: para servicios de compose, Coolify
+no siempre inyecta las labels de Traefik y el proxy responde `404 page not
+found`. El compose enruta el entrypoint `http` (:80) al puerto 3000 del
+contenedor; el TLS lo termina Cloudflare (igual que la web).
+
+- Pon `APP_DOMAIN=gestion.tallerdelpatinete.es` en las variables del recurso
+  (por defecto ya usa ese valor).
+- **Deja VACÍO el campo "Domains" del servicio `app` en la UI de Coolify** para
+  no crear un router duplicado con la misma regla `Host`.
+- Túnel Cloudflare: `gestion.tallerdelpatinete.es → http://<server_coolify>:80`
+  (o el LB de UpCloud que ya usa preprod). Traefik enruta por el `Host`.
+
+Si vuelve a salir `404 page not found`, es Traefik sin ruta para ese host:
+revisa que el contenedor esté en la red `coolify` y que las labels de arriba
+existan (el 404 lo devuelve Traefik, no la app).
 
 Las migraciones se aplican solas en cada arranque (`docker-entrypoint.sh`) y
 `/api/health` es el healthcheck.
