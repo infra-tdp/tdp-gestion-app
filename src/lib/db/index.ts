@@ -4,26 +4,39 @@ import * as schema from "./schema";
 
 /**
  * Config del pool. La BD de producción es la PostgreSQL gestionada de UpCloud,
- * que presenta un certificado firmado por su CA privada. `pg` trata
- * `sslmode=require` como verify-full y, al mezclar la connectionString, da
- * PRIORIDAD al sslmode de la URL sobre cualquier `ssl` explícito — descartando
- * la CA. Por eso, cuando aportamos DATABASE_CA_CERT, quitamos el sslmode de la
- * URL para que la verificación se haga contra nuestra CA. Sin CA, se respeta el
- * sslmode de la URL (p. ej. `no-verify`).
+ * que presenta un certificado firmado por su CA privada. Resolvemos el SSL en
+ * código y quitamos `sslmode` de la URL (pg le da prioridad y repisaría lo
+ * nuestro). Prioridad, de mayor a menor:
+ *   1. `sslmode=disable`   → sin TLS.
+ *   2. `sslmode=no-verify` → TLS sin verificar el certificado (MANDA aunque
+ *      haya DATABASE_CA_CERT: es el escape rápido y nunca debe quedar anulado).
+ *   3. DATABASE_CA_CERT    → verificación completa contra esa CA.
+ *   4. cualquier otro sslmode (require/verify-full) → verificación contra el
+ *      almacén del sistema.
+ * Debe coincidir con scripts/migrate.mjs.
  */
 function buildPoolConfig(): PoolConfig {
-  const ca = process.env.DATABASE_CA_CERT?.replace(/\\n/g, "\n");
-  let connectionString = process.env.DATABASE_URL;
-  if (ca && connectionString) {
+  const ca = process.env.DATABASE_CA_CERT?.replace(/\\n/g, "\n").trim() || undefined;
+  const rawUrl = process.env.DATABASE_URL;
+  let sslmode: string | null = null;
+  let connectionString = rawUrl;
+  if (rawUrl) {
     try {
-      const u = new URL(connectionString);
+      const u = new URL(rawUrl);
+      sslmode = u.searchParams.get("sslmode");
       u.searchParams.delete("sslmode");
       connectionString = u.toString();
     } catch {
       /* URL no parseable: se deja tal cual */
+      return { connectionString: rawUrl, max: 10, ...(ca ? { ssl: { ca } } : {}) };
     }
   }
-  return { connectionString, max: 10, ...(ca ? { ssl: { ca } } : {}) };
+  let ssl: PoolConfig["ssl"];
+  if (sslmode === "disable") ssl = false;
+  else if (sslmode === "no-verify") ssl = { rejectUnauthorized: false };
+  else if (ca) ssl = { ca, rejectUnauthorized: true };
+  else if (sslmode) ssl = { rejectUnauthorized: true };
+  return { connectionString, max: 10, ...(ssl !== undefined ? { ssl } : {}) };
 }
 
 /**
