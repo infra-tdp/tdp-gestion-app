@@ -18,14 +18,6 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
-      # Coolify (magic var de compose): expone el servicio 'app' por el puerto
-      # 3000 y genera el "service" de Traefik con ese destino. Sin esto, Coolify
-      # crea el router pero asume el puerto 80 y NO genera el service → el router
-      # queda sin destino y Traefik responde 404. El dominio se fija en "Domains
-      # for app" de la UI; aquí solo importa el nombre de la variable (SERVICE_
-      # FQDN_<servicio>_<puerto>). DEBE ir dentro de este environment del compose
-      # (como variable de UI no se interpreta).
-      SERVICE_FQDN_APP_3000: ""
       DATABASE_URL: "${DATABASE_URL}"
       DATABASE_CA_CERT: "${DATABASE_CA_CERT:-}"
       AUTH_SECRET: "${AUTH_SECRET}"
