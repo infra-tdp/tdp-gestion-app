@@ -61,7 +61,9 @@ El resto activa módulos según se configuren (la UI avisa de qué falta):
 - **Nodos**: `UPCLOUD_USERNAME/PASSWORD` (sub-cuenta API, la misma de tofu).
 - **OpenTofu**: `PG_CONN_STR` (estado, ver docs/82 del repo de infra) +
   `GITHUB_TOKEN` (clonar `tdp-tienda-infra`).
-- **Staging**: `COOLIFY_URL/TOKEN/PROJECT_UUID/SERVER_UUID/GITHUB_APP_UUID`,
+- **Staging**: `COOLIFY_API_URL` (origen de la API, p. ej. `http://10.0.0.16:8000`;
+  **no** uses `COOLIFY_URL`, es reservada y Coolify la pisa con la URL de la app) +
+  `COOLIFY_TOKEN/PROJECT_UUID/SERVER_UUID/GITHUB_APP_UUID`,
   `S3_*` + `BACKUP_GPG_PASSPHRASE` (backups), `STAGING_*`.
 - **Monitores**: `MONITOR_DEFAULTS` (se crean solos al arrancar).
 - **IA**: `ANTHROPIC_API_KEY`.
