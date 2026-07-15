@@ -270,13 +270,25 @@ async function provision(envId: number): Promise<void> {
 /**
  * Redespliega el entorno (Coolify vuelve a construir/desplegar la rama). Se usa
  * tras `git push` en el devbox para ver los cambios en vivo antes de abrir la PR.
+ *
+ * Además REINTENTA fijar el dominio: si en el primer deploy Coolify tardó en
+ * parsear el compose y el paso `domain` falló, aquí ya está cargado, así que
+ * pulsar "Redesplegar" lo deja enrutado. Idempotente y no fatal.
  */
 export async function redeployStagingEnv(envId: number): Promise<void> {
   const [env] = await db.select().from(schema.stagingEnvs).where(eq(schema.stagingEnvs.id, envId));
   if (!env) throw new Error("Entorno no encontrado");
   if (!env.coolifyAppUuid) throw new Error("El entorno aún no tiene recurso en Coolify");
+  if (env.url) {
+    try {
+      await setAppDomain(env.coolifyAppUuid, env.url);
+      await logStep(envId, "domain", true, `${env.url} (fijado en redeploy)`);
+    } catch (err) {
+      await logStep(envId, "domain", false, `Dominio no fijado: ${err instanceof Error ? err.message : err}`);
+    }
+  }
   await deployApp(env.coolifyAppUuid);
-  await logStep(envId, "redeploy", true, "Redeploy lanzado (rebuild de la rama)");
+  await logStep(envId, "redeploy", true, "Redeploy lanzado (rebuild de la rama + dominio)");
 }
 
 /** Destruye el entorno: borra el recurso de Coolify y (sin PR abierta) la rama. */
