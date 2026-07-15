@@ -8,10 +8,12 @@ import { requestStaging } from "@/lib/actions/staging";
 export function StagingRequestForm({
   tags,
   backups,
+  backupError,
   hasSshKey,
 }: {
   tags: string[];
   backups: { key: string; label: string }[];
+  backupError?: string | null;
   hasSshKey: boolean;
 }) {
   const router = useRouter();
@@ -89,7 +91,7 @@ export function StagingRequestForm({
         <label className="block text-[12px] font-semibold uppercase tracking-wider text-muted mb-1.5">
           Backup de la BD a restaurar
         </label>
-        <select name="backupKey" className="tdp-input" defaultValue="">
+        <select name="backupKey" className="tdp-input" defaultValue="" disabled={backups.length === 0 && !!backupError}>
           <option value="">El más reciente (recomendado)</option>
           {backups.map((b) => (
             <option key={b.key} value={b.key}>
@@ -97,9 +99,16 @@ export function StagingRequestForm({
             </option>
           ))}
         </select>
-        <p className="text-muted text-[12px] mt-1.5">
-          Se restaura en un MySQL temporal del entorno. Producción no se toca.
-        </p>
+        {backupError ? (
+          <p className="text-warning text-[12px] mt-1.5 flex gap-1.5">
+            <span aria-hidden>⚠</span>
+            <span>{backupError}</span>
+          </p>
+        ) : (
+          <p className="text-muted text-[12px] mt-1.5">
+            Se restaura en un MySQL temporal del entorno. Producción no se toca.
+          </p>
+        )}
       </div>
 
       <div>
