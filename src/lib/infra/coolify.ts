@@ -53,6 +53,7 @@ export function coolifyConfigured(): boolean {
 type CoolifyServer = { uuid: string; name: string; ip?: string; is_coolify_host?: boolean };
 type CoolifyProject = { uuid: string; name: string; description?: string };
 type CoolifyResource = { uuid: string; name: string; type?: string; status?: string };
+type CoolifyGithubApp = { uuid: string; name: string; organization?: string | null };
 
 /**
  * Normaliza la respuesta de un endpoint de lista de Coolify: acepta tanto un
@@ -102,6 +103,38 @@ export async function listServersCoolify(): Promise<
 export async function listProjects(): Promise<{ uuid: string; name: string; description: string }[]> {
   const projects = unwrapList<CoolifyProject>(await coolify("/projects"), "GET /projects");
   return projects.map((p) => ({ uuid: p.uuid, name: p.name, description: p.description ?? "" }));
+}
+
+/** GitHub Apps (Sources) registradas en Coolify. */
+export async function listGithubApps(): Promise<{ uuid: string; name: string; organization: string }[]> {
+  const apps = unwrapList<CoolifyGithubApp>(await coolify("/github-apps"), "GET /github-apps");
+  return apps.map((a) => ({ uuid: a.uuid, name: a.name, organization: a.organization ?? "" }));
+}
+
+/**
+ * Resuelve el UUID de la GitHub App con la que Coolify clonará el repo privado:
+ *  1. COOLIFY_GITHUB_APP_UUID si está definido (override explícito).
+ *  2. si no, se descubre por la API: la que coincide con GITHUB_ORG; si solo hay
+ *     una, esa. Si hay varias y ninguna coincide, error con la lista para elegir.
+ * Así, en el caso habitual (una sola GitHub App), no hace falta configurar nada.
+ */
+export async function resolveGithubAppUuid(): Promise<string> {
+  const explicit = process.env.COOLIFY_GITHUB_APP_UUID;
+  if (explicit) return explicit;
+  const apps = await listGithubApps();
+  if (apps.length === 0) {
+    throw new Error(
+      "No hay ninguna GitHub App en Coolify (Sources → GitHub App). Créala o define COOLIFY_GITHUB_APP_UUID.",
+    );
+  }
+  if (apps.length === 1) return apps[0].uuid;
+  const org = (process.env.GITHUB_ORG ?? "infra-tdp").toLowerCase();
+  const match = apps.find((a) => a.organization.toLowerCase() === org);
+  if (match) return match.uuid;
+  throw new Error(
+    `Hay ${apps.length} GitHub Apps en Coolify y ninguna coincide con la organización "${org}". ` +
+      `Define COOLIFY_GITHUB_APP_UUID con una de: ${apps.map((a) => `${a.name} (${a.uuid})`).join(", ")}.`,
+  );
 }
 
 /** Recursos (apps/BDs/servicios) desplegados en un servidor. */
@@ -193,7 +226,6 @@ export async function createStagingApp(params: {
 }): Promise<{ uuid: string }> {
   const projectUuid = params.projectUuid || process.env.COOLIFY_PROJECT_UUID;
   const serverUuid = params.serverUuid || process.env.COOLIFY_SERVER_UUID;
-  const githubAppUuid = process.env.COOLIFY_GITHUB_APP_UUID;
   const repository = process.env.STAGING_GIT_REPOSITORY ?? "infra-tdp/tdp-app-wordpress-prod";
   const composeLocation =
     params.composeLocation ?? process.env.STAGING_COMPOSE_LOCATION ?? "/docker-compose.staging.yaml";
@@ -202,9 +234,8 @@ export async function createStagingApp(params: {
       "Falta el proyecto o el servidor de Coolify (elígelos en el formulario o define COOLIFY_PROJECT_UUID / COOLIFY_SERVER_UUID)",
     );
   }
-  if (!githubAppUuid) {
-    throw new Error("COOLIFY_GITHUB_APP_UUID no configurado (Sources → GitHub App → uuid)");
-  }
+  // GitHub App: se resuelve sola (la de la org / la única) salvo override por env.
+  const githubAppUuid = await resolveGithubAppUuid();
   return coolify<{ uuid: string }>("/applications/private-github-app", {
     method: "POST",
     body: JSON.stringify({
