@@ -3,6 +3,7 @@ import { db, schema } from "@/lib/db";
 import { requireUser } from "@/lib/auth/rbac";
 import { ensureRbacLoaded, hasPermission, type Permission } from "@/lib/auth/rbac";
 import { logoutAction } from "@/lib/auth/actions";
+import { APP_VERSION, appCommit } from "@/lib/version";
 import { Sidebar } from "@/components/sidebar";
 
 export const dynamic = "force-dynamic";
@@ -45,7 +46,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         unread={unreadRow?.n ?? 0}
         logout={logoutAction}
       />
-      <main className="flex-1 min-w-0 px-8 py-8 max-w-[1280px]">{children}</main>
+      <main className="flex-1 min-w-0 flex flex-col">
+        <div className="px-8 py-8 max-w-[1280px] w-full flex-1">{children}</div>
+        <footer className="px-8 py-3 border-t border-border-dark text-muted text-[12px] flex items-center gap-2">
+          <span>TDP Gestión</span>
+          <span className="text-primary font-semibold">v{APP_VERSION}</span>
+          {appCommit() && <span className="opacity-70">· {appCommit()}</span>}
+        </footer>
+      </main>
     </div>
   );
 }
