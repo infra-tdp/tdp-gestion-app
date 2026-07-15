@@ -354,7 +354,7 @@ export async function getApp(appUuid: string): Promise<Record<string, unknown>> 
  * si no falla con "Cannot set docker_compose_domains without docker_compose_raw".
  * Devuelve true si cargó dentro del timeout.
  */
-export async function waitForComposeLoaded(appUuid: string, timeoutMs = 120000): Promise<boolean> {
+export async function waitForComposeLoaded(appUuid: string, timeoutMs = 180000): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
