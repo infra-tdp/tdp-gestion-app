@@ -50,7 +50,7 @@ export function coolifyConfigured(): boolean {
   return Boolean(process.env.COOLIFY_API_URL && process.env.COOLIFY_TOKEN);
 }
 
-type CoolifyServer = { uuid: string; name: string; ip?: string };
+type CoolifyServer = { uuid: string; name: string; ip?: string; is_coolify_host?: boolean };
 type CoolifyProject = { uuid: string; name: string; description?: string };
 type CoolifyResource = { uuid: string; name: string; type?: string; status?: string };
 
@@ -86,9 +86,16 @@ function unwrapList<T>(payload: unknown, label: string): T[] {
   );
 }
 
-export async function listServersCoolify(): Promise<{ uuid: string; name: string; ip: string }[]> {
+export async function listServersCoolify(): Promise<
+  { uuid: string; name: string; ip: string; isCoolifyHost: boolean }[]
+> {
   const servers = unwrapList<CoolifyServer>(await coolify("/servers"), "GET /servers");
-  return servers.map((s) => ({ uuid: s.uuid, name: s.name, ip: s.ip ?? "" }));
+  return servers.map((s) => ({
+    uuid: s.uuid,
+    name: s.name,
+    ip: s.ip ?? "",
+    isCoolifyHost: Boolean(s.is_coolify_host),
+  }));
 }
 
 /** Proyectos de Coolify donde alojar el recurso de staging. */
@@ -120,9 +127,18 @@ export type ServerLoad = {
  * libre al desplegar un staging. Si un servidor no responde a /resources se le
  * asigna Infinity para no recomendarlo. El de menor carga queda marcado como
  * recommended (empates → el primero por nombre, estable).
+ *
+ * Se excluye el host de control de Coolify (is_coolify_host) — no queremos
+ * desplegar stagings donde corre el propio Coolify. Si por alguna razón fuera el
+ * único servidor, no se filtra (para no dejar la lista vacía). Se puede forzar su
+ * inclusión con STAGING_INCLUDE_COOLIFY_HOST=1.
  */
 export async function listServersWithLoad(): Promise<ServerLoad[]> {
-  const servers = await listServersCoolify();
+  const all = await listServersCoolify();
+  const includeHost = ["1", "true"].includes(process.env.STAGING_INCLUDE_COOLIFY_HOST ?? "");
+  const deployable = all.filter((s) => !s.isCoolifyHost);
+  // Excluimos el host de control salvo que sea el único servidor o se fuerce.
+  const servers = includeHost || deployable.length === 0 ? all : deployable;
   const loaded = await Promise.all(
     servers.map(async (s) => {
       let count = Number.POSITIVE_INFINITY;
