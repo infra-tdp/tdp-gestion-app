@@ -7,7 +7,7 @@
  * Opcional: si Coolify inyecta el commit desplegado (SOURCE_COMMIT / COMMIT_SHA),
  * el pie muestra también el SHA corto para trazar exactamente qué build corre.
  */
-export const APP_VERSION = "0.3.1";
+export const APP_VERSION = "0.3.2";
 
 export function appCommit(): string | null {
   const sha = process.env.SOURCE_COMMIT ?? process.env.COMMIT_SHA ?? process.env.GIT_SHA;
