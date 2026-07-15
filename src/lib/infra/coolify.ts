@@ -212,6 +212,25 @@ export async function listServersWithLoad(): Promise<ServerLoad[]> {
   }));
 }
 
+/**
+ * Asegura que el proyecto tenga el environment indicado (por defecto los
+ * proyectos de Coolify solo traen "production"). Idempotente: si ya existe
+ * (409), no falla. Evita el 404 "Environment not found" al crear la app.
+ */
+export async function ensureEnvironment(projectUuid: string, name: string): Promise<void> {
+  try {
+    await coolify(`/projects/${projectUuid}/environments`, {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "";
+    // 409 / "already exists" → el environment ya está, seguimos.
+    if (msg.includes("409") || msg.toLowerCase().includes("already exists")) return;
+    throw err;
+  }
+}
+
 export async function healthcheck(): Promise<boolean> {
   try {
     const token = process.env.COOLIFY_TOKEN;
@@ -255,12 +274,16 @@ export async function createStagingApp(params: {
   }
   // GitHub App: se resuelve sola (la de la org / la única) salvo override por env.
   const githubAppUuid = await resolveGithubAppUuid();
+  // Environment: nos aseguramos de que exista en el proyecto (idempotente) para
+  // no chocar con el 404 "Environment not found".
+  const environmentName = process.env.COOLIFY_ENVIRONMENT_NAME ?? "staging";
+  await ensureEnvironment(projectUuid, environmentName);
   return coolify<{ uuid: string }>("/applications/private-github-app", {
     method: "POST",
     body: JSON.stringify({
       project_uuid: projectUuid,
       server_uuid: serverUuid,
-      environment_name: process.env.COOLIFY_ENVIRONMENT_NAME ?? "staging",
+      environment_name: environmentName,
       github_app_uuid: githubAppUuid,
       git_repository: repository,
       git_branch: params.branch,
