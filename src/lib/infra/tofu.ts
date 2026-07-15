@@ -100,6 +100,28 @@ export function tofuConfigured(): boolean {
 }
 
 /**
+ * El backend `pg` de tofu usa lib/pq (Go), que SOLO admite sslmode
+ * disable|require|verify-ca|verify-full. Traduce los valores de node-postgres /
+ * libpq que ahí no existen (no-verify, prefer, allow) a su equivalente `require`
+ * (en lib/pq, `require` = cifrado SIN verificar el certificado). Evita el
+ * `pq: unsupported sslmode "no-verify"` al reusar la misma cadena que la app.
+ */
+export function normalizePgSslmode(conn: string | undefined): string | undefined {
+  if (!conn) return conn;
+  try {
+    const u = new URL(conn);
+    const mode = u.searchParams.get("sslmode");
+    if (mode && ["no-verify", "prefer", "allow"].includes(mode)) {
+      u.searchParams.set("sslmode", "require");
+      return u.toString();
+    }
+    return conn;
+  } catch {
+    return conn;
+  }
+}
+
+/**
  * Encola y ejecuta un run de tofu. Devuelve el id del run inmediatamente;
  * la ejecución sigue en background actualizando el log en BD.
  */
@@ -173,8 +195,12 @@ async function executeRun(
       await prepare(stackDir);
     }
 
+    const pgConn = normalizePgSslmode(process.env.PG_CONN_STR);
+    if (pgConn && pgConn !== process.env.PG_CONN_STR) {
+      onOutput("[tofu] PG_CONN_STR: sslmode 'no-verify'/'prefer' → 'require' (lib/pq no los soporta)\n");
+    }
     const env: Record<string, string | undefined> = {
-      PG_CONN_STR: process.env.PG_CONN_STR,
+      PG_CONN_STR: pgConn,
       UPCLOUD_USERNAME: process.env.UPCLOUD_USERNAME,
       UPCLOUD_PASSWORD: process.env.UPCLOUD_PASSWORD,
       TF_IN_AUTOMATION: "1",
