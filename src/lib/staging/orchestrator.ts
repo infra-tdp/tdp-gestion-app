@@ -18,6 +18,12 @@ import {
   removeStagingRoute,
   upsertStagingRoute,
 } from "@/lib/infra/cloudflare";
+import {
+  findServerUuidByIp,
+  getServerPrivateIp,
+  isPrivateIpv4,
+  upcloudConfigured,
+} from "@/lib/infra/upcloud";
 import { createBranch, deleteBranch } from "@/lib/infra/github";
 
 /**
@@ -48,29 +54,55 @@ async function logStep(envId: number, step: string, ok: boolean, message?: strin
 }
 
 /**
- * IP privada del nodo (que alcanza cloudflared) para enrutar el entorno.
- * Se resuelve por STAGING_NODE_IPS (JSON serverUuid→ip) y, si no, por la IP que
- * reporta Coolify para ese servidor.
+ * IP privada del nodo (la que alcanza cloudflared) para enrutar el entorno,
+ * resuelta DINÁMICAMENTE a partir del servidor de Coolify elegido — así, al
+ * añadir un nodo nuevo no hay que tocar ninguna variable:
+ *   1. STAGING_NODE_IPS (JSON serverUuid→ip): override manual opcional.
+ *   2. IP que reporta Coolify del servidor: si ya es privada (10.x), se usa.
+ *   3. si es pública, se correlaciona en UpCloud (por esa IP) y se lee la IP de
+ *      su interfaz privada/SDN.
+ *   4. último recurso: la IP pública de Coolify.
  */
 async function resolveNodeIp(serverUuid: string | null): Promise<string | null> {
   const uuid = serverUuid || process.env.COOLIFY_SERVER_UUID || "";
+
+  // 1. Override manual (normalmente innecesario)
   const map = process.env.STAGING_NODE_IPS;
   if (map && uuid) {
     try {
       const m = JSON.parse(map) as Record<string, string>;
       if (m[uuid]) return m[uuid];
     } catch {
-      // STAGING_NODE_IPS mal formado — caemos a la IP de Coolify
+      // STAGING_NODE_IPS mal formado — seguimos con la resolución dinámica
     }
   }
+
+  // 2. IP que reporta Coolify para ese servidor
+  let coolifyIp = "";
   try {
     const servers = await listServersCoolify();
-    const s = servers.find((x) => x.uuid === uuid);
-    if (s?.ip && s.ip !== "host.docker.internal") return s.ip;
+    coolifyIp = servers.find((x) => x.uuid === uuid)?.ip ?? "";
   } catch {
     // sin acceso a /servers
   }
-  return null;
+  if (!coolifyIp || coolifyIp === "host.docker.internal") return null;
+  if (isPrivateIpv4(coolifyIp)) return coolifyIp;
+
+  // 3. IP pública → IP privada vía UpCloud
+  if (upcloudConfigured()) {
+    try {
+      const upUuid = await findServerUuidByIp(coolifyIp);
+      if (upUuid) {
+        const priv = await getServerPrivateIp(upUuid, process.env.UPCLOUD_PRIVATE_NETWORK);
+        if (priv) return priv;
+      }
+    } catch {
+      // UpCloud no respondió — caemos a la IP pública
+    }
+  }
+
+  // 4. Sin privada localizada: la pública como último recurso
+  return coolifyIp;
 }
 
 async function setStatus(

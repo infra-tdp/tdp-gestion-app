@@ -1,6 +1,6 @@
 {
   "name": "tdp-gestion-app",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "private": true,
   "description": "TDP Gestión — CRM interno de Taller del Patinete. Fase 1: gestión de infraestructura (UpCloud + OpenTofu + Coolify + staging para devs).",
   "scripts": {
