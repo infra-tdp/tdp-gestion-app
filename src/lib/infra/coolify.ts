@@ -348,6 +348,27 @@ export async function getApp(appUuid: string): Promise<Record<string, unknown>> 
   return coolify(`/applications/${appUuid}`);
 }
 
+/**
+ * Espera a que Coolify haya clonado y parseado el compose (docker_compose_raw
+ * deja de estar vacío). Necesario antes de fijar `docker_compose_domains`, que
+ * si no falla con "Cannot set docker_compose_domains without docker_compose_raw".
+ * Devuelve true si cargó dentro del timeout.
+ */
+export async function waitForComposeLoaded(appUuid: string, timeoutMs = 120000): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const app = await getApp(appUuid);
+      const raw = app["docker_compose_raw"] ?? app["docker_compose"];
+      if (typeof raw === "string" && raw.trim().length > 0) return true;
+    } catch {
+      // reintenta hasta el timeout
+    }
+    await new Promise((r) => setTimeout(r, 5000));
+  }
+  return false;
+}
+
 export async function deleteApp(appUuid: string): Promise<void> {
   await coolify(
     `/applications/${appUuid}?delete_configurations=true&delete_volumes=true&docker_cleanup=true&delete_connected_networks=true`,
