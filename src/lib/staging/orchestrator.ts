@@ -7,11 +7,17 @@ import {
   createStagingApp,
   deleteApp,
   deployApp,
+  listServersCoolify,
   redeployByUuid,
   setAppDomain,
   setAppEnvBulk,
   waitForComposeLoaded,
 } from "@/lib/infra/coolify";
+import {
+  cloudflareRoutingConfigured,
+  removeStagingRoute,
+  upsertStagingRoute,
+} from "@/lib/infra/cloudflare";
 import { createBranch, deleteBranch } from "@/lib/infra/github";
 
 /**
@@ -39,6 +45,32 @@ function genSecret(bytes = 48): string {
 
 async function logStep(envId: number, step: string, ok: boolean, message?: string): Promise<void> {
   await db.insert(schema.stagingEvents).values({ envId, step, ok, message });
+}
+
+/**
+ * IP privada del nodo (que alcanza cloudflared) para enrutar el entorno.
+ * Se resuelve por STAGING_NODE_IPS (JSON serverUuid→ip) y, si no, por la IP que
+ * reporta Coolify para ese servidor.
+ */
+async function resolveNodeIp(serverUuid: string | null): Promise<string | null> {
+  const uuid = serverUuid || process.env.COOLIFY_SERVER_UUID || "";
+  const map = process.env.STAGING_NODE_IPS;
+  if (map && uuid) {
+    try {
+      const m = JSON.parse(map) as Record<string, string>;
+      if (m[uuid]) return m[uuid];
+    } catch {
+      // STAGING_NODE_IPS mal formado — caemos a la IP de Coolify
+    }
+  }
+  try {
+    const servers = await listServersCoolify();
+    const s = servers.find((x) => x.uuid === uuid);
+    if (s?.ip && s.ip !== "host.docker.internal") return s.ip;
+  } catch {
+    // sin acceso a /servers
+  }
+  return null;
 }
 
 async function setStatus(
@@ -175,8 +207,13 @@ async function provision(envId: number): Promise<void> {
 
     // 5. Variables de entorno del stack de staging
     const image = `${process.env.GHCR_IMAGE ?? "ghcr.io/infra-tdp/tdp-app-wordpress-prod"}:${env.imageTag}`;
-    const domainBase = process.env.STAGING_DOMAIN_BASE ?? "staging.tallerdelpatinete.es";
-    const fqdn = `${env.slug}.${domainBase}`;
+    // Subdominio de UN SOLO nivel (label con guiones) para que lo cubra el
+    // certificado Universal SSL gratuito de Cloudflare (*.tallerdelpatinete.es).
+    // Un segundo nivel (p. ej. <slug>.staging.tallerdelpatinete.es) exigiría
+    // Advanced Certificate Manager (de pago). STAGING_DOMAIN_BASE = el apex.
+    const domainApex = process.env.STAGING_DOMAIN_BASE ?? "tallerdelpatinete.es";
+    const domainLabelSuffix = process.env.STAGING_DOMAIN_SUFFIX ?? "-staging";
+    const fqdn = `${env.slug}${domainLabelSuffix}.${domainApex}`;
     const dbPass = genSecret(18).replace(/[+/=]/g, "x");
 
     const envs: Record<string, string> = {
@@ -250,6 +287,26 @@ async function provision(envId: number): Promise<void> {
       );
     }
 
+    // 8. Ruta pública dinámica: Cloudflare Tunnel → Traefik del nodo donde vive
+    //    el entorno (la app elige nodo, así que la ruta es por-entorno).
+    if (cloudflareRoutingConfigured()) {
+      try {
+        const nodeIp = await resolveNodeIp(env.serverUuid);
+        if (!nodeIp) {
+          throw new Error("no se pudo resolver la IP del nodo (define STAGING_NODE_IPS o revisa Coolify)");
+        }
+        await upsertStagingRoute(fqdn, nodeIp);
+        await logStep(envId, "route", true, `${fqdn} → ${nodeIp}:80 (Cloudflare Tunnel)`);
+      } catch (err) {
+        await logStep(
+          envId,
+          "route",
+          false,
+          `No se pudo crear la ruta en Cloudflare: ${err instanceof Error ? err.message : err}`,
+        );
+      }
+    }
+
     await setStatus(envId, "active", { url: `https://${fqdn}` });
 
     await db.insert(schema.notifications).values({
@@ -297,6 +354,15 @@ export async function destroyStagingEnv(envId: number): Promise<void> {
   if (!env) throw new Error("Entorno no encontrado");
   await setStatus(envId, "destroying");
   try {
+    // Quita la ruta de Cloudflare (ingress del túnel + DNS) del entorno.
+    if (cloudflareRoutingConfigured() && env.url) {
+      try {
+        await removeStagingRoute(env.url.replace(/^https?:\/\//, ""));
+        await logStep(envId, "route-delete", true, "Ruta de Cloudflare eliminada");
+      } catch (err) {
+        await logStep(envId, "route-delete", false, `Ruta CF no eliminada: ${err instanceof Error ? err.message : err}`);
+      }
+    }
     if (env.coolifyAppUuid) {
       await deleteApp(env.coolifyAppUuid);
       await logStep(envId, "coolify-delete", true, "Recurso de Coolify eliminado (con volúmenes)");
