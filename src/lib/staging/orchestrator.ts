@@ -376,8 +376,20 @@ export async function redeployStagingEnv(envId: number): Promise<void> {
       await logStep(envId, "domain", false, `Dominio no fijado: ${err instanceof Error ? err.message : err}`);
     }
   }
+  // Reintenta también la ruta de Cloudflare (útil tras arreglar permisos del token).
+  if (cloudflareRoutingConfigured() && env.url) {
+    try {
+      const nodeIp = await resolveNodeIp(env.serverUuid);
+      if (!nodeIp) throw new Error("no se pudo resolver la IP del nodo");
+      const host = env.url.replace(/^https?:\/\//, "");
+      await upsertStagingRoute(host, nodeIp);
+      await logStep(envId, "route", true, `${host} → ${nodeIp}:80 (fijado en redeploy)`);
+    } catch (err) {
+      await logStep(envId, "route", false, `Ruta CF no creada: ${err instanceof Error ? err.message : err}`);
+    }
+  }
   await deployApp(env.coolifyAppUuid);
-  await logStep(envId, "redeploy", true, "Redeploy lanzado (rebuild de la rama + dominio)");
+  await logStep(envId, "redeploy", true, "Redeploy lanzado (rebuild + dominio + ruta)");
 }
 
 /** Destruye el entorno: borra el recurso de Coolify y (sin PR abierta) la rama. */
