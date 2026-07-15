@@ -53,7 +53,13 @@ export function coolifyConfigured(): boolean {
 type CoolifyServer = { uuid: string; name: string; ip?: string; is_coolify_host?: boolean };
 type CoolifyProject = { uuid: string; name: string; description?: string };
 type CoolifyResource = { uuid: string; name: string; type?: string; status?: string };
-type CoolifyGithubApp = { uuid: string; name: string; organization?: string | null };
+type CoolifyGithubApp = {
+  uuid: string;
+  name: string;
+  organization?: string | null;
+  is_public?: boolean;
+  installation_id?: number | null;
+};
 
 /**
  * Normaliza la respuesta de un endpoint de lista de Coolify: acepta tanto un
@@ -106,17 +112,27 @@ export async function listProjects(): Promise<{ uuid: string; name: string; desc
 }
 
 /** GitHub Apps (Sources) registradas en Coolify. */
-export async function listGithubApps(): Promise<{ uuid: string; name: string; organization: string }[]> {
+export async function listGithubApps(): Promise<
+  { uuid: string; name: string; organization: string; isPublic: boolean; installed: boolean }[]
+> {
   const apps = unwrapList<CoolifyGithubApp>(await coolify("/github-apps"), "GET /github-apps");
-  return apps.map((a) => ({ uuid: a.uuid, name: a.name, organization: a.organization ?? "" }));
+  return apps.map((a) => ({
+    uuid: a.uuid,
+    name: a.name,
+    organization: a.organization ?? "",
+    isPublic: Boolean(a.is_public),
+    installed: Boolean(a.installation_id),
+  }));
 }
 
 /**
  * Resuelve el UUID de la GitHub App con la que Coolify clonará el repo privado:
  *  1. COOLIFY_GITHUB_APP_UUID si está definido (override explícito).
- *  2. si no, se descubre por la API: la que coincide con GITHUB_ORG; si solo hay
- *     una, esa. Si hay varias y ninguna coincide, error con la lista para elegir.
- * Así, en el caso habitual (una sola GitHub App), no hace falta configurar nada.
+ *  2. si no, se descubre por la API. Solo sirven las Apps INSTALADAS (tienen
+ *     installation_id) — se descarta la fuente pública por defecto ("Public
+ *     GitHub"), que no puede clonar repos privados. Si queda una, esa; si quedan
+ *     varias, se desempata por GITHUB_ORG y, si no, error con la lista.
+ * En el caso habitual (una sola GitHub App instalada) no hay que configurar nada.
  */
 export async function resolveGithubAppUuid(): Promise<string> {
   const explicit = process.env.COOLIFY_GITHUB_APP_UUID;
@@ -127,13 +143,16 @@ export async function resolveGithubAppUuid(): Promise<string> {
       "No hay ninguna GitHub App en Coolify (Sources → GitHub App). Créala o define COOLIFY_GITHUB_APP_UUID.",
     );
   }
-  if (apps.length === 1) return apps[0].uuid;
+  // Solo GitHub Apps instaladas y no públicas pueden clonar el repo privado.
+  const usable = apps.filter((a) => a.installed && !a.isPublic);
+  const pool = usable.length > 0 ? usable : apps;
+  if (pool.length === 1) return pool[0].uuid;
   const org = (process.env.GITHUB_ORG ?? "infra-tdp").toLowerCase();
-  const match = apps.find((a) => a.organization.toLowerCase() === org);
+  const match = pool.find((a) => a.organization.toLowerCase() === org);
   if (match) return match.uuid;
   throw new Error(
-    `Hay ${apps.length} GitHub Apps en Coolify y ninguna coincide con la organización "${org}". ` +
-      `Define COOLIFY_GITHUB_APP_UUID con una de: ${apps.map((a) => `${a.name} (${a.uuid})`).join(", ")}.`,
+    `Hay ${pool.length} GitHub Apps instalables en Coolify y no se pudo elegir una por la organización "${org}". ` +
+      `Define COOLIFY_GITHUB_APP_UUID con una de: ${pool.map((a) => `${a.name} (${a.uuid})`).join(", ")}.`,
   );
 }
 
