@@ -44,8 +44,63 @@ export function coolifyConfigured(): boolean {
   return Boolean(process.env.COOLIFY_URL && process.env.COOLIFY_TOKEN);
 }
 
+type CoolifyServer = { uuid: string; name: string; ip?: string };
+type CoolifyProject = { uuid: string; name: string; description?: string };
+type CoolifyResource = { uuid: string; name: string; type?: string; status?: string };
+
 export async function listServersCoolify(): Promise<{ uuid: string; name: string; ip: string }[]> {
-  return coolify("/servers");
+  const servers = await coolify<CoolifyServer[]>("/servers");
+  return servers.map((s) => ({ uuid: s.uuid, name: s.name, ip: s.ip ?? "" }));
+}
+
+/** Proyectos de Coolify donde alojar el recurso de staging. */
+export async function listProjects(): Promise<{ uuid: string; name: string; description: string }[]> {
+  const projects = await coolify<CoolifyProject[]>("/projects");
+  return projects.map((p) => ({ uuid: p.uuid, name: p.name, description: p.description ?? "" }));
+}
+
+/** Recursos (apps/BDs/servicios) desplegados en un servidor. */
+export async function listServerResources(serverUuid: string): Promise<CoolifyResource[]> {
+  return coolify<CoolifyResource[]>(`/servers/${serverUuid}/resources`);
+}
+
+export type ServerLoad = {
+  uuid: string;
+  name: string;
+  ip: string;
+  /** Nº de recursos desplegados en el servidor (menos = más libre). */
+  count: number;
+  /** true en el servidor con menos recursos (sugerido por defecto). */
+  recommended: boolean;
+};
+
+/**
+ * Lista los servidores con su carga (nº de recursos) para poder sugerir el más
+ * libre al desplegar un staging. Si un servidor no responde a /resources se le
+ * asigna Infinity para no recomendarlo. El de menor carga queda marcado como
+ * recommended (empates → el primero por nombre, estable).
+ */
+export async function listServersWithLoad(): Promise<ServerLoad[]> {
+  const servers = await listServersCoolify();
+  const loaded = await Promise.all(
+    servers.map(async (s) => {
+      let count = Number.POSITIVE_INFINITY;
+      try {
+        const resources = await listServerResources(s.uuid);
+        count = Array.isArray(resources) ? resources.length : 0;
+      } catch {
+        // servidor inalcanzable / sin permiso → no se recomienda
+      }
+      return { uuid: s.uuid, name: s.name, ip: s.ip, count };
+    }),
+  );
+  loaded.sort((a, b) => a.count - b.count || a.name.localeCompare(b.name));
+  const best = loaded.find((s) => Number.isFinite(s.count));
+  return loaded.map((s) => ({
+    ...s,
+    count: Number.isFinite(s.count) ? s.count : -1, // -1 = desconocido (se muestra “?”)
+    recommended: best ? s.uuid === best.uuid : false,
+  }));
 }
 
 export async function healthcheck(): Promise<boolean> {
@@ -74,15 +129,21 @@ export async function createStagingApp(params: {
   description?: string;
   /** Ruta del compose en el repo. Por defecto STAGING_COMPOSE_LOCATION. */
   composeLocation?: string;
+  /** Servidor de Coolify donde desplegar. Por defecto COOLIFY_SERVER_UUID. */
+  serverUuid?: string;
+  /** Proyecto de Coolify donde alojar el recurso. Por defecto COOLIFY_PROJECT_UUID. */
+  projectUuid?: string;
 }): Promise<{ uuid: string }> {
-  const projectUuid = process.env.COOLIFY_PROJECT_UUID;
-  const serverUuid = process.env.COOLIFY_SERVER_UUID;
+  const projectUuid = params.projectUuid || process.env.COOLIFY_PROJECT_UUID;
+  const serverUuid = params.serverUuid || process.env.COOLIFY_SERVER_UUID;
   const githubAppUuid = process.env.COOLIFY_GITHUB_APP_UUID;
   const repository = process.env.STAGING_GIT_REPOSITORY ?? "infra-tdp/tdp-app-wordpress-prod";
   const composeLocation =
     params.composeLocation ?? process.env.STAGING_COMPOSE_LOCATION ?? "/docker-compose.staging.yaml";
   if (!projectUuid || !serverUuid) {
-    throw new Error("COOLIFY_PROJECT_UUID / COOLIFY_SERVER_UUID no configurados");
+    throw new Error(
+      "Falta el proyecto o el servidor de Coolify (elígelos en el formulario o define COOLIFY_PROJECT_UUID / COOLIFY_SERVER_UUID)",
+    );
   }
   if (!githubAppUuid) {
     throw new Error("COOLIFY_GITHUB_APP_UUID no configurado (Sources → GitHub App → uuid)");

@@ -68,6 +68,10 @@ export async function requestStagingEnv(params: {
   imageTag: string;
   /** Clave S3 del backup elegido; vacío = el más reciente (se resuelve al provisionar) */
   backupKey?: string;
+  /** UUID del servidor de Coolify elegido; vacío = COOLIFY_SERVER_UUID por defecto */
+  serverUuid?: string;
+  /** UUID del proyecto de Coolify elegido; vacío = COOLIFY_PROJECT_UUID por defecto */
+  projectUuid?: string;
   purpose?: string;
   ttlHours: number;
 }): Promise<number> {
@@ -83,6 +87,8 @@ export async function requestStagingEnv(params: {
       buildFromBranch: params.buildFromBranch,
       imageTag: params.imageTag || "latest",
       backupKey: params.backupKey || null,
+      serverUuid: params.serverUuid || null,
+      projectUuid: params.projectUuid || null,
       branch,
       status: "pending",
       devboxPort: DEVBOX_PORT_BASE, // se recalcula con el id real justo después
@@ -155,12 +161,15 @@ async function provision(envId: number): Promise<void> {
       branch: env.branch,
       description: `Staging efímero ${env.slug} · ${modeLabel} · TDP Gestión`,
       composeLocation,
+      serverUuid: env.serverUuid ?? undefined,
+      projectUuid: env.projectUuid ?? undefined,
     });
     await db
       .update(schema.stagingEnvs)
       .set({ coolifyAppUuid: app.uuid })
       .where(eq(schema.stagingEnvs.id, envId));
-    await logStep(envId, "coolify", true, `Recurso creado en Coolify (${app.uuid})`);
+    const targetLabel = env.serverUuid ? ` en servidor ${env.serverUuid}` : "";
+    await logStep(envId, "coolify", true, `Recurso creado en Coolify (${app.uuid})${targetLabel}`);
 
     // 5. Variables de entorno del stack de staging
     const image = `${process.env.GHCR_IMAGE ?? "ghcr.io/infra-tdp/tdp-app-wordpress-prod"}:${env.imageTag}`;

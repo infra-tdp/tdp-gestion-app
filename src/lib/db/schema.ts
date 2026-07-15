@@ -116,6 +116,10 @@ export const stagingEnvs = pgTable("staging_envs", {
   /** Rama creada desde main en el repo de la web */
   branch: varchar("branch", { length: 160 }).notNull(),
   status: stagingStatusEnum("status").notNull().default("pending"),
+  /** UUID del servidor de Coolify elegido (vacío = COOLIFY_SERVER_UUID por defecto) */
+  serverUuid: varchar("server_uuid", { length: 64 }),
+  /** UUID del proyecto de Coolify elegido (vacío = COOLIFY_PROJECT_UUID por defecto) */
+  projectUuid: varchar("project_uuid", { length: 64 }),
   /** UUID del recurso creado en Coolify */
   coolifyAppUuid: varchar("coolify_app_uuid", { length: 64 }),
   /** Clave S3 del backup restaurado */
