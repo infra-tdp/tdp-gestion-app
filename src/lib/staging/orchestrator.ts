@@ -7,8 +7,10 @@ import {
   createStagingApp,
   deleteApp,
   deployApp,
+  redeployByUuid,
   setAppDomain,
   setAppEnvBulk,
+  waitForComposeLoaded,
 } from "@/lib/infra/coolify";
 import { createBranch, deleteBranch } from "@/lib/infra/github";
 
@@ -224,17 +226,29 @@ async function provision(envId: number): Promise<void> {
     await setAppEnvBulk(app.uuid, envs);
     await logStep(envId, "envs", true, `${Object.keys(envs).length} variables configuradas`);
 
-    // 6. Dominio del entorno (requiere wildcard DNS/túnel hacia el server de Coolify)
-    try {
-      await setAppDomain(app.uuid, `https://${fqdn}`);
-      await logStep(envId, "domain", true, `https://${fqdn}`);
-    } catch (err) {
-      await logStep(envId, "domain", false, `No se pudo fijar el dominio: ${err instanceof Error ? err.message : err}`);
-    }
-
-    // 7. Deploy
+    // 6. Deploy (PRIMERO): Coolify clona y parsea el compose. El dominio de una
+    //    app compose (docker_compose_domains) no se puede fijar hasta que el
+    //    compose está parseado, así que va después.
     await deployApp(app.uuid);
-    await logStep(envId, "deploy", true, "Deploy lanzado — db-restore restaurará el backup en el primer arranque");
+    await logStep(envId, "deploy", true, "Deploy lanzado — Coolify clona/construye/arranca; db-restore restaura el backup");
+
+    // 7. Dominio del entorno: esperamos a que el compose cargue, lo fijamos y
+    //    redeployamos para que Traefik enrute el nuevo host. Requiere wildcard
+    //    DNS/túnel hacia el server de Coolify.
+    try {
+      const loaded = await waitForComposeLoaded(app.uuid);
+      if (!loaded) throw new Error("Coolify tardó demasiado en cargar el compose");
+      await setAppDomain(app.uuid, `https://${fqdn}`);
+      await redeployByUuid(app.uuid);
+      await logStep(envId, "domain", true, `https://${fqdn} (aplicado con redeploy)`);
+    } catch (err) {
+      await logStep(
+        envId,
+        "domain",
+        false,
+        `No se pudo fijar el dominio automáticamente: ${err instanceof Error ? err.message : err}. Cuando termine el primer deploy, pulsa "Redesplegar".`,
+      );
+    }
 
     await setStatus(envId, "active", { url: `https://${fqdn}` });
 
