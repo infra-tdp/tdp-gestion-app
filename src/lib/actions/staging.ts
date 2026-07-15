@@ -12,12 +12,20 @@ export async function requestStaging(formData: FormData): Promise<{ id?: number;
   const buildFromBranch = String(formData.get("source") ?? "build") !== "image";
   const imageTag = String(formData.get("imageTag") ?? "latest").trim() || "latest";
   const backupKey = String(formData.get("backupKey") ?? "").trim(); // vacío = más reciente
+  const serverUuid = String(formData.get("serverUuid") ?? "").trim(); // vacío = COOLIFY_SERVER_UUID
+  const projectUuid = String(formData.get("projectUuid") ?? "").trim(); // vacío = COOLIFY_PROJECT_UUID
   const ttlHours = Math.min(Math.max(Number(formData.get("ttlHours") ?? 72), 1), 24 * 14);
   if (!buildFromBranch && !/^[\w][\w.-]{0,127}$/.test(imageTag)) {
     return { error: "Tag de imagen inválido" };
   }
   if (backupKey && !/^[\w./-]{1,256}\.sql\.gz\.gpg$/.test(backupKey)) {
     return { error: "Clave de backup inválida" };
+  }
+  if (serverUuid && !/^[\w-]{1,64}$/.test(serverUuid)) {
+    return { error: "Servidor de Coolify inválido" };
+  }
+  if (projectUuid && !/^[\w-]{1,64}$/.test(projectUuid)) {
+    return { error: "Proyecto de Coolify inválido" };
   }
   try {
     const id = await requestStagingEnv({
@@ -26,6 +34,8 @@ export async function requestStaging(formData: FormData): Promise<{ id?: number;
       buildFromBranch,
       imageTag,
       backupKey,
+      serverUuid,
+      projectUuid,
       ttlHours,
     });
     revalidatePath("/staging");

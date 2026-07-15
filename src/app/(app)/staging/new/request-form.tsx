@@ -5,21 +5,36 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { requestStaging } from "@/lib/actions/staging";
 
+type ServerOption = { uuid: string; name: string; ip: string; count: number; recommended: boolean };
+type ProjectOption = { uuid: string; name: string; description: string };
+
 export function StagingRequestForm({
   tags,
   backups,
   backupError,
+  servers,
+  projects,
+  targetsError,
   hasSshKey,
 }: {
   tags: string[];
   backups: { key: string; label: string }[];
   backupError?: string | null;
+  servers: ServerOption[];
+  projects: ProjectOption[];
+  targetsError?: string | null;
   hasSshKey: boolean;
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [source, setSource] = useState<"build" | "image">("build");
   const [pending, startTransition] = useTransition();
+
+  const recommended = servers.find((s) => s.recommended) ?? servers[0];
+  const serverLabel = (s: ServerOption) => {
+    const load = s.count < 0 ? "carga ?" : `${s.count} recurso${s.count === 1 ? "" : "s"}`;
+    return `${s.name} · ${load}${s.recommended ? " · recomendado" : ""}`;
+  };
 
   return (
     <form
@@ -110,6 +125,55 @@ export function StagingRequestForm({
           </p>
         )}
       </div>
+
+      <div>
+        <label className="block text-[12px] font-semibold uppercase tracking-wider text-muted mb-1.5">
+          Servidor de despliegue
+        </label>
+        {servers.length > 0 ? (
+          <>
+            <select name="serverUuid" className="tdp-input" defaultValue={recommended?.uuid ?? ""}>
+              {servers.map((s) => (
+                <option key={s.uuid} value={s.uuid}>
+                  {serverLabel(s)}
+                </option>
+              ))}
+            </select>
+            <p className="text-muted text-[12px] mt-1.5">
+              Sugerido: <b className="text-text">{recommended ? recommended.name : "—"}</b>, el servidor con menos
+              recursos desplegados. Puedes elegir otro.
+            </p>
+          </>
+        ) : (
+          <>
+            <input type="hidden" name="serverUuid" value="" />
+            <p className="text-warning text-[12px] flex gap-1.5">
+              <span aria-hidden>⚠</span>
+              <span>{targetsError ?? "Sin servidores de Coolify disponibles — se usará COOLIFY_SERVER_UUID."}</span>
+            </p>
+          </>
+        )}
+      </div>
+
+      {projects.length > 0 && (
+        <div>
+          <label className="block text-[12px] font-semibold uppercase tracking-wider text-muted mb-1.5">
+            Proyecto de Coolify
+          </label>
+          <select name="projectUuid" className="tdp-input" defaultValue="">
+            <option value="">Por defecto (COOLIFY_PROJECT_UUID)</option>
+            {projects.map((p) => (
+              <option key={p.uuid} value={p.uuid}>
+                {p.name}
+                {p.description ? ` · ${p.description}` : ""}
+              </option>
+            ))}
+          </select>
+          <p className="text-muted text-[12px] mt-1.5">
+            El entorno de Coolify será <code>staging</code> dentro del proyecto elegido.
+          </p>
+        </div>
+      )}
 
       <div>
         <label className="block text-[12px] font-semibold uppercase tracking-wider text-muted mb-1.5">

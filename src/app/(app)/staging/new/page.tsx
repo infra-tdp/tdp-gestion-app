@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { requirePermission } from "@/lib/auth/rbac";
 import { backupsConfigured, listBackups } from "@/lib/infra/backups";
-import { coolifyConfigured } from "@/lib/infra/coolify";
+import { coolifyConfigured, listProjects, listServersWithLoad, type ServerLoad } from "@/lib/infra/coolify";
 import { githubConfigured, listGhcrTags } from "@/lib/infra/github";
 import { Card, PageHeader } from "@/components/ui";
 import { StagingRequestForm } from "./request-form";
@@ -56,15 +56,50 @@ async function loadBackups(): Promise<LoadedBackups> {
   }
 }
 
+type CoolifyTargets = {
+  servers: ServerLoad[];
+  projects: { uuid: string; name: string; description: string }[];
+  targetsError: string | null;
+};
+
+/**
+ * Carga servidores (con su carga de recursos) y proyectos de Coolify para que el
+ * dev elija dónde desplegar. El servidor con menos recursos se marca como
+ * recomendado. Si Coolify no está configurado o no responde, devuelve listas
+ * vacías + el motivo, y el formulario cae al servidor/proyecto por defecto (env).
+ */
+async function loadCoolifyTargets(): Promise<CoolifyTargets> {
+  if (!coolifyConfigured()) {
+    return {
+      servers: [],
+      projects: [],
+      targetsError: "Coolify sin configurar (COOLIFY_URL / COOLIFY_TOKEN) — se usará el servidor/proyecto por defecto.",
+    };
+  }
+  try {
+    const [servers, projects] = await Promise.all([listServersWithLoad(), listProjects()]);
+    return { servers, projects, targetsError: null };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return {
+      servers: [],
+      projects: [],
+      targetsError: `No se pudo consultar Coolify (${msg}). Se usará el servidor/proyecto por defecto del entorno.`,
+    };
+  }
+}
+
 export default async function NewStagingPage() {
   const user = await requirePermission("staging.request");
 
-  const [tags, backupResult, keyCount] = await Promise.all([
+  const [tags, backupResult, coolifyTargets, keyCount] = await Promise.all([
     githubConfigured() ? listGhcrTags().catch(() => []) : Promise.resolve([]),
     loadBackups(),
+    loadCoolifyTargets(),
     db.$count(schema.sshKeys, eq(schema.sshKeys.userId, user.id)),
   ]);
   const { backups, backupError } = backupResult;
+  const { servers, projects, targetsError } = coolifyTargets;
 
   const missing: string[] = [];
   if (!githubConfigured()) missing.push("GITHUB_TOKEN (rama + tags ghcr + PRs)");
@@ -84,6 +119,9 @@ export default async function NewStagingPage() {
               label: `${b.key.split("/").pop()} · ${(b.size / 1024 / 1024).toFixed(1)} MB`,
             }))}
             backupError={backupError}
+            servers={servers}
+            projects={projects}
+            targetsError={targetsError}
             hasSshKey={keyCount > 0}
           />
         </Card>

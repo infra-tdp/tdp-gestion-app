@@ -22,6 +22,13 @@
       "when": 1784112211936,
       "tag": "0002_staging_build_from_branch",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1784128994140,
+      "tag": "0003_staging_server_project",
+      "breakpoints": true
     }
   ]
 }
