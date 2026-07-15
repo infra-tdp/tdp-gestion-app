@@ -12,7 +12,10 @@ import "server-only";
 function baseUrl(): string {
   const url = process.env.COOLIFY_URL;
   if (!url) throw new Error("COOLIFY_URL no configurado");
-  return url.replace(/\/$/, "");
+  // Tolerante: el código añade /api/v1, así que quitamos un /api/v1 o /api final
+  // (error típico) y la barra de cierre. COOLIFY_URL debe ser solo el origen,
+  // p. ej. http://10.0.0.16:8000
+  return url.replace(/\/+$/, "").replace(/\/api(?:\/v1)?$/i, "");
 }
 
 async function coolify<T = unknown>(path: string, init?: RequestInit): Promise<T> {
@@ -60,6 +63,16 @@ function unwrapList<T>(payload: unknown, label: string): T[] {
   if (payload && typeof payload === "object") {
     const data = (payload as Record<string, unknown>).data;
     if (Array.isArray(data)) return data as T[];
+  }
+  // Caso típico: COOLIFY_URL apunta a una web (la propia app u otra) en vez de a
+  // la API de Coolify → recibimos una página HTML, no JSON. Lo detectamos para
+  // dar una pista accionable en lugar de un volcado opaco.
+  if (typeof payload === "string" && /^\s*<(?:!doctype|html)/i.test(payload)) {
+    throw new Error(
+      `${label}: COOLIFY_URL apunta a una página web (HTML), no a la API de Coolify. ` +
+        `Debe ser el origen del panel de Coolify SIN /api/v1 (p. ej. http://10.0.0.16:8000). ` +
+        `Si ya la cambiaste, haz REDEPLOY de la app: Coolify solo aplica las variables en el próximo despliegue.`,
+    );
   }
   const snippet =
     typeof payload === "string"
