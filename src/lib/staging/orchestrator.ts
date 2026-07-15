@@ -213,7 +213,10 @@ async function provision(envId: number): Promise<void> {
       STAGING_DISABLE_PLUGINS: process.env.STAGING_DISABLE_PLUGINS ?? "",
       // Devbox
       DEVBOX_PORT: String(env.devboxPort ?? DEVBOX_PORT_BASE),
-      DEVBOX_PUBLIC_KEYS: publicKeys,
+      // Las claves van en base64 (una sola línea): Coolify escribe cada variable
+      // como una línea del .env y un valor multilínea (varias claves con \n)
+      // rompía el parseo. El devbox-init lo decodifica.
+      DEVBOX_PUBLIC_KEYS_B64: publicKeys ? Buffer.from(publicKeys, "utf8").toString("base64") : "",
       STAGING_BRANCH: env.branch,
       STAGING_GIT_REPO: `${process.env.GITHUB_ORG ?? "infra-tdp"}/${process.env.WEB_REPO ?? "tdp-app-wordpress-prod"}`,
       STAGING_GIT_TOKEN: process.env.STAGING_GIT_TOKEN ?? "",
