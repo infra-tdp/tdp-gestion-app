@@ -35,7 +35,8 @@ services:
       INFRA_REPO: "${INFRA_REPO:-tdp-tienda-infra}"
       GHCR_IMAGE: "${GHCR_IMAGE:-ghcr.io/infra-tdp/tdp-app-wordpress-prod}"
       # --- Coolify API (crear/destruir stagings) ---
-      COOLIFY_URL: "${COOLIFY_URL:-}"
+      # OJO: NO usar COOLIFY_URL — Coolify reserva ese nombre y lo pisa con la URL de la app.
+      COOLIFY_API_URL: "${COOLIFY_API_URL:-}"
       COOLIFY_TOKEN: "${COOLIFY_TOKEN:-}"
       COOLIFY_PROJECT_UUID: "${COOLIFY_PROJECT_UUID:-}"
       COOLIFY_SERVER_UUID: "${COOLIFY_SERVER_UUID:-}"

@@ -73,7 +73,7 @@ async function loadCoolifyTargets(): Promise<CoolifyTargets> {
     return {
       servers: [],
       projects: [],
-      targetsError: "Coolify sin configurar (COOLIFY_URL / COOLIFY_TOKEN) — se usará el servidor/proyecto por defecto.",
+      targetsError: "Coolify sin configurar (COOLIFY_API_URL / COOLIFY_TOKEN) — se usará el servidor/proyecto por defecto.",
     };
   }
   try {
@@ -103,7 +103,7 @@ export default async function NewStagingPage() {
 
   const missing: string[] = [];
   if (!githubConfigured()) missing.push("GITHUB_TOKEN (rama + tags ghcr + PRs)");
-  if (!coolifyConfigured()) missing.push("COOLIFY_URL / COOLIFY_TOKEN (crear el stack)");
+  if (!coolifyConfigured()) missing.push("COOLIFY_API_URL / COOLIFY_TOKEN (crear el stack)");
   if (!backupsConfigured()) missing.push("S3_* + BACKUP_GPG_PASSPHRASE (restaurar el backup)");
 
   return (

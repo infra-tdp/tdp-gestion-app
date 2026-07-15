@@ -5,15 +5,18 @@ import "server-only";
  * La app crea/destruye los stacks de staging como recursos de Coolify y los
  * despliega igual que hace el CI de la web (POST /api/v1/deploy).
  *
- *   COOLIFY_URL    p. ej. https://coolify.tallerdelpatinete.internal
- *   COOLIFY_TOKEN  API token (Keys & Tokens → API tokens, con permisos de escritura)
+ *   COOLIFY_API_URL  origen de la API de Coolify, p. ej. http://10.0.0.16:8000
+ *                    ⚠ NO usar COOLIFY_URL: es una variable PREDEFINIDA de Coolify
+ *                    que él mismo inyecta con la URL de la propia app, así que
+ *                    cualquier valor que pongas ahí lo pisa Coolify.
+ *   COOLIFY_TOKEN    API token (Keys & Tokens → API tokens, con permisos de escritura)
  */
 
 function baseUrl(): string {
-  const url = process.env.COOLIFY_URL;
-  if (!url) throw new Error("COOLIFY_URL no configurado");
+  const url = process.env.COOLIFY_API_URL;
+  if (!url) throw new Error("COOLIFY_API_URL no configurado");
   // Tolerante: el código añade /api/v1, así que quitamos un /api/v1 o /api final
-  // (error típico) y la barra de cierre. COOLIFY_URL debe ser solo el origen,
+  // (error típico) y la barra de cierre. COOLIFY_API_URL debe ser solo el origen,
   // p. ej. http://10.0.0.16:8000
   return url.replace(/\/+$/, "").replace(/\/api(?:\/v1)?$/i, "");
 }
@@ -44,7 +47,7 @@ async function coolify<T = unknown>(path: string, init?: RequestInit): Promise<T
 }
 
 export function coolifyConfigured(): boolean {
-  return Boolean(process.env.COOLIFY_URL && process.env.COOLIFY_TOKEN);
+  return Boolean(process.env.COOLIFY_API_URL && process.env.COOLIFY_TOKEN);
 }
 
 type CoolifyServer = { uuid: string; name: string; ip?: string };
@@ -64,14 +67,14 @@ function unwrapList<T>(payload: unknown, label: string): T[] {
     const data = (payload as Record<string, unknown>).data;
     if (Array.isArray(data)) return data as T[];
   }
-  // Caso típico: COOLIFY_URL apunta a una web (la propia app u otra) en vez de a
-  // la API de Coolify → recibimos una página HTML, no JSON. Lo detectamos para
-  // dar una pista accionable en lugar de un volcado opaco.
+  // Caso típico: COOLIFY_API_URL apunta a una web (la propia app u otra) en vez
+  // de a la API de Coolify → recibimos una página HTML, no JSON. Lo detectamos
+  // para dar una pista accionable en lugar de un volcado opaco.
   if (typeof payload === "string" && /^\s*<(?:!doctype|html)/i.test(payload)) {
     throw new Error(
-      `${label}: COOLIFY_URL apunta a una página web (HTML), no a la API de Coolify. ` +
+      `${label}: COOLIFY_API_URL apunta a una página web (HTML), no a la API de Coolify. ` +
         `Debe ser el origen del panel de Coolify SIN /api/v1 (p. ej. http://10.0.0.16:8000). ` +
-        `Si ya la cambiaste, haz REDEPLOY de la app: Coolify solo aplica las variables en el próximo despliegue.`,
+        `OJO: no la llames COOLIFY_URL — Coolify reserva ese nombre y lo pisa con la URL de la app.`,
     );
   }
   const snippet =
@@ -79,7 +82,7 @@ function unwrapList<T>(payload: unknown, label: string): T[] {
       ? payload.slice(0, 140)
       : JSON.stringify(payload)?.slice(0, 140) ?? String(payload);
   throw new Error(
-    `${label} no devolvió una lista (revisa COOLIFY_URL, que apunte a la API y que el token tenga permiso). Respuesta: ${snippet}`,
+    `${label} no devolvió una lista (revisa COOLIFY_API_URL, que apunte a la API y que el token tenga permiso). Respuesta: ${snippet}`,
   );
 }
 
