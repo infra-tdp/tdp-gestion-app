@@ -72,12 +72,15 @@ export async function createStagingApp(params: {
   name: string;
   branch: string;
   description?: string;
+  /** Ruta del compose en el repo. Por defecto STAGING_COMPOSE_LOCATION. */
+  composeLocation?: string;
 }): Promise<{ uuid: string }> {
   const projectUuid = process.env.COOLIFY_PROJECT_UUID;
   const serverUuid = process.env.COOLIFY_SERVER_UUID;
   const githubAppUuid = process.env.COOLIFY_GITHUB_APP_UUID;
   const repository = process.env.STAGING_GIT_REPOSITORY ?? "infra-tdp/tdp-app-wordpress-prod";
-  const composeLocation = process.env.STAGING_COMPOSE_LOCATION ?? "/docker-compose.staging.yaml";
+  const composeLocation =
+    params.composeLocation ?? process.env.STAGING_COMPOSE_LOCATION ?? "/docker-compose.staging.yaml";
   if (!projectUuid || !serverUuid) {
     throw new Error("COOLIFY_PROJECT_UUID / COOLIFY_SERVER_UUID no configurados");
   }

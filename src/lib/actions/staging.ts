@@ -4,18 +4,53 @@ import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { assertPermission } from "@/lib/auth/rbac";
-import { destroyStagingEnv, requestStagingEnv } from "@/lib/staging/orchestrator";
+import { destroyStagingEnv, redeployStagingEnv, requestStagingEnv } from "@/lib/staging/orchestrator";
 import { createPullRequest, getPullRequest, mergePullRequest } from "@/lib/infra/github";
 
 export async function requestStaging(formData: FormData): Promise<{ id?: number; error?: string }> {
   const user = await assertPermission("staging.request");
+  const buildFromBranch = String(formData.get("source") ?? "build") !== "image";
   const imageTag = String(formData.get("imageTag") ?? "latest").trim() || "latest";
+  const backupKey = String(formData.get("backupKey") ?? "").trim(); // vacío = más reciente
   const ttlHours = Math.min(Math.max(Number(formData.get("ttlHours") ?? 72), 1), 24 * 14);
-  if (!/^[\w][\w.-]{0,127}$/.test(imageTag)) return { error: "Tag de imagen inválido" };
+  if (!buildFromBranch && !/^[\w][\w.-]{0,127}$/.test(imageTag)) {
+    return { error: "Tag de imagen inválido" };
+  }
+  if (backupKey && !/^[\w./-]{1,256}\.sql\.gz\.gpg$/.test(backupKey)) {
+    return { error: "Clave de backup inválida" };
+  }
   try {
-    const id = await requestStagingEnv({ userId: user.id, userName: user.name, imageTag, ttlHours });
+    const id = await requestStagingEnv({
+      userId: user.id,
+      userName: user.name,
+      buildFromBranch,
+      imageTag,
+      backupKey,
+      ttlHours,
+    });
     revalidatePath("/staging");
     return { id };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/** Redespliega el entorno (rebuild de la rama) tras hacer push desde el devbox. */
+export async function redeployStaging(envId: number): Promise<{ error?: string }> {
+  const user = await assertPermission("staging.view");
+  const [env] = await db.select().from(schema.stagingEnvs).where(eq(schema.stagingEnvs.id, envId));
+  if (!env) return { error: "Entorno no encontrado" };
+  if (env.requestedBy !== user.id) {
+    try {
+      await assertPermission("staging.destroy.any");
+    } catch {
+      return { error: "Solo puedes redesplegar tus propios entornos" };
+    }
+  }
+  try {
+    await redeployStagingEnv(envId);
+    revalidatePath(`/staging/${envId}`);
+    return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : String(err) };
   }

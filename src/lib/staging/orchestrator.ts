@@ -64,7 +64,10 @@ export function slugify(input: string): string {
 export async function requestStagingEnv(params: {
   userId: number;
   userName: string;
+  buildFromBranch: boolean;
   imageTag: string;
+  /** Clave S3 del backup elegido; vacío = el más reciente (se resuelve al provisionar) */
+  backupKey?: string;
   purpose?: string;
   ttlHours: number;
 }): Promise<number> {
@@ -77,7 +80,9 @@ export async function requestStagingEnv(params: {
     .values({
       slug,
       requestedBy: params.userId,
+      buildFromBranch: params.buildFromBranch,
       imageTag: params.imageTag || "latest",
+      backupKey: params.backupKey || null,
       branch,
       status: "pending",
       devboxPort: DEVBOX_PORT_BASE, // se recalcula con el id real justo después
@@ -110,8 +115,10 @@ async function provision(envId: number): Promise<void> {
     await createBranch(env.branch);
     await logStep(envId, "branch", true, `Rama ${env.branch} creada desde main`);
 
-    // 2. Último backup + URL prefirmada
-    const backup = await latestBackup();
+    // 2. Backup elegido (o el más reciente) + URL prefirmada
+    const backup = env.backupKey
+      ? { key: env.backupKey, size: 0, lastModified: new Date() }
+      : await latestBackup();
     if (!backup) throw new Error("No hay backups .sql.gz.gpg en el bucket");
     const dumpUrl = await presignBackupUrl(backup.key);
     await db
@@ -122,7 +129,7 @@ async function provision(envId: number): Promise<void> {
       envId,
       "backup",
       true,
-      `Backup ${backup.key} (${(backup.size / 1024 / 1024).toFixed(1)} MB, ${backup.lastModified.toISOString()})`,
+      env.backupKey ? `Backup elegido: ${backup.key}` : `Último backup: ${backup.key}`,
     );
 
     // 3. Claves SSH del solicitante para el devbox
@@ -137,11 +144,17 @@ async function provision(envId: number): Promise<void> {
       await logStep(envId, "ssh-keys", true, `${keys.length} clave(s) SSH inyectadas en el devbox`);
     }
 
-    // 4. Recurso en Coolify
+    // 4. Recurso en Coolify. Compose según el modo: build desde la rama (Dockerfile
+    //    del repo) o imagen ghcr inmutable.
+    const composeLocation = env.buildFromBranch
+      ? process.env.STAGING_COMPOSE_BUILD_LOCATION ?? "/docker-compose.staging-build.yaml"
+      : process.env.STAGING_COMPOSE_LOCATION ?? "/docker-compose.staging.yaml";
+    const modeLabel = env.buildFromBranch ? `build desde ${env.branch}` : `imagen :${env.imageTag}`;
     const app = await createStagingApp({
       name: `staging-${env.slug}`,
       branch: env.branch,
-      description: `Staging efímero ${env.slug} · imagen :${env.imageTag} · TDP Gestión`,
+      description: `Staging efímero ${env.slug} · ${modeLabel} · TDP Gestión`,
+      composeLocation,
     });
     await db
       .update(schema.stagingEnvs)
@@ -181,11 +194,14 @@ async function provision(envId: number): Promise<void> {
       TDP_DOMAIN: fqdn,
       WP_ENVIRONMENT_TYPE: "staging",
       WP_DYNAMIC_HOST: "true",
-      // Media: reutiliza el bucket de media en solo-lectura vía plugin offload
-      S3_BUCKET_MEDIA: process.env.S3_BUCKET_MEDIA ?? "",
-      S3_ENDPOINT: process.env.S3_ENDPOINT ?? "",
-      S3_REGION: process.env.S3_REGION ?? "",
+      // Media: las imágenes existentes ya están en la BD con URL del CDN → cargan
+      // del CDN en solo-lectura (idéntico a prod). Desactivamos el plugin de offload
+      // en staging (WP_DISABLE_OFFLOAD + STAGING_DISABLE_PLUGINS) para que las SUBIDAS
+      // NUEVAS del dev se guarden en el disco local del entorno (mueren al destruirlo)
+      // y NUNCA toquen el bucket de prod. No se pasan claves de escritura de media.
       TDP_CDN_DOMAIN: process.env.TDP_CDN_DOMAIN ?? "",
+      WP_DISABLE_OFFLOAD: "1",
+      STAGING_DISABLE_PLUGINS: process.env.STAGING_DISABLE_PLUGINS ?? "",
       // Devbox
       DEVBOX_PORT: String(env.devboxPort ?? DEVBOX_PORT_BASE),
       DEVBOX_PUBLIC_KEYS: publicKeys,
@@ -223,6 +239,18 @@ async function provision(envId: number): Promise<void> {
     await setStatus(envId, "error", { errorMessage: message });
     throw err;
   }
+}
+
+/**
+ * Redespliega el entorno (Coolify vuelve a construir/desplegar la rama). Se usa
+ * tras `git push` en el devbox para ver los cambios en vivo antes de abrir la PR.
+ */
+export async function redeployStagingEnv(envId: number): Promise<void> {
+  const [env] = await db.select().from(schema.stagingEnvs).where(eq(schema.stagingEnvs.id, envId));
+  if (!env) throw new Error("Entorno no encontrado");
+  if (!env.coolifyAppUuid) throw new Error("El entorno aún no tiene recurso en Coolify");
+  await deployApp(env.coolifyAppUuid);
+  await logStep(envId, "redeploy", true, "Redeploy lanzado (rebuild de la rama)");
 }
 
 /** Destruye el entorno: borra el recurso de Coolify y (sin PR abierta) la rama. */

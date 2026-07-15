@@ -5,9 +5,18 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { requestStaging } from "@/lib/actions/staging";
 
-export function StagingRequestForm({ tags, hasSshKey }: { tags: string[]; hasSshKey: boolean }) {
+export function StagingRequestForm({
+  tags,
+  backups,
+  hasSshKey,
+}: {
+  tags: string[];
+  backups: { key: string; label: string }[];
+  hasSshKey: boolean;
+}) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
+  const [source, setSource] = useState<"build" | "image">("build");
   const [pending, startTransition] = useTransition();
 
   return (
@@ -23,21 +32,73 @@ export function StagingRequestForm({ tags, hasSshKey }: { tags: string[]; hasSsh
     >
       <div>
         <label className="block text-[12px] font-semibold uppercase tracking-wider text-muted mb-1.5">
-          Versión de la imagen (ghcr)
+          Origen del código
         </label>
-        {tags.length > 0 ? (
-          <select name="imageTag" className="tdp-input" defaultValue="latest">
-            {tags.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <input name="imageTag" className="tdp-input" defaultValue="latest" placeholder="latest" />
-        )}
+        <div className="flex flex-col gap-2">
+          <label className="flex items-start gap-2 cursor-pointer">
+            <input
+              type="radio"
+              name="source"
+              value="build"
+              className="tdp-check mt-0.5"
+              checked={source === "build"}
+              onChange={() => setSource("build")}
+            />
+            <span>
+              <b>Construir desde la rama</b> — copia main y compila con el <code>Dockerfile</code> del repo.
+              <span className="block text-muted text-[12px]">Ves tu código tal cual; ideal para desarrollar.</span>
+            </span>
+          </label>
+          <label className="flex items-start gap-2 cursor-pointer">
+            <input
+              type="radio"
+              name="source"
+              value="image"
+              className="tdp-check mt-0.5"
+              checked={source === "image"}
+              onChange={() => setSource("image")}
+            />
+            <span>
+              <b>Imagen ghcr</b> — una versión ya publicada.
+              <span className="block text-muted text-[12px]">Para probar un release contra datos de prod.</span>
+            </span>
+          </label>
+        </div>
+      </div>
+
+      {source === "image" && (
+        <div>
+          <label className="block text-[12px] font-semibold uppercase tracking-wider text-muted mb-1.5">
+            Versión de la imagen (ghcr)
+          </label>
+          {tags.length > 0 ? (
+            <select name="imageTag" className="tdp-input" defaultValue="latest">
+              {tags.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input name="imageTag" className="tdp-input" defaultValue="latest" placeholder="latest" />
+          )}
+        </div>
+      )}
+
+      <div>
+        <label className="block text-[12px] font-semibold uppercase tracking-wider text-muted mb-1.5">
+          Backup de la BD a restaurar
+        </label>
+        <select name="backupKey" className="tdp-input" defaultValue="">
+          <option value="">El más reciente (recomendado)</option>
+          {backups.map((b) => (
+            <option key={b.key} value={b.key}>
+              {b.label}
+            </option>
+          ))}
+        </select>
         <p className="text-muted text-[12px] mt-1.5">
-          Por defecto <code className="text-primary">latest</code> — la última imagen publicada por el CI.
+          Se restaura en un MySQL temporal del entorno. Producción no se toca.
         </p>
       </div>
 

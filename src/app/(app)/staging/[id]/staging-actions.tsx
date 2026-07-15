@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { destroyStaging, mergeStagingPr, openStagingPr } from "@/lib/actions/staging";
+import { destroyStaging, mergeStagingPr, openStagingPr, redeployStaging } from "@/lib/actions/staging";
 
 export function StagingActions({
   envId,
@@ -45,6 +45,17 @@ export function StagingActions({
 
   return (
     <div className="space-y-4 text-sm">
+      {status === "active" && (isOwner || canDestroy) && (
+        <div>
+          <button className="btn-dark" disabled={pending} onClick={() => act(() => redeployStaging(envId))}>
+            Redesplegar (rebuild de la rama)
+          </button>
+          <p className="text-muted text-[12px] mt-1.5">
+            Tras hacer <code>git push</code> en el devbox, redespliega para ver tus cambios en vivo.
+          </p>
+        </div>
+      )}
+
       {status === "active" && !hasPr && (
         <div>
           <label className="block text-[12px] font-semibold uppercase tracking-wider text-muted mb-1.5">
