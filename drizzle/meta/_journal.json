@@ -15,6 +15,13 @@
       "when": 1784042767659,
       "tag": "0001_apps_registry",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784112211936,
+      "tag": "0002_staging_build_from_branch",
+      "breakpoints": true
     }
   ]
 }

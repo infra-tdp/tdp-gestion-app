@@ -109,7 +109,9 @@ export const stagingEnvs = pgTable("staging_envs", {
   requestedBy: integer("requested_by")
     .notNull()
     .references(() => users.id),
-  /** Tag de la imagen ghcr elegida (default: latest) */
+  /** true = construir desde la rama (Dockerfile del repo); false = usar imagen ghcr */
+  buildFromBranch: boolean("build_from_branch").notNull().default(true),
+  /** Tag de la imagen ghcr elegida cuando NO se construye desde la rama (default: latest) */
   imageTag: varchar("image_tag", { length: 128 }).notNull().default("latest"),
   /** Rama creada desde main en el repo de la web */
   branch: varchar("branch", { length: 160 }).notNull(),

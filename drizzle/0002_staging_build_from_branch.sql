@@ -1,0 +1,1 @@
+ALTER TABLE "staging_envs" ADD COLUMN "build_from_branch" boolean DEFAULT true NOT NULL;
