@@ -71,6 +71,48 @@ export async function getServer(uuid: string): Promise<UpcloudServer> {
   return data.server;
 }
 
+/** IPv4 en rangos privados (RFC1918). */
+export function isPrivateIpv4(ip: string): boolean {
+  return /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(ip);
+}
+
+type UpcloudInterface = {
+  type: string; // public | utility | private
+  network?: string; // uuid de la red SDN cuando type = private
+  ip_addresses?: { ip_address: { address: string; family: string }[] };
+};
+
+/**
+ * IP privada del servidor UpCloud: la de su interfaz SDN (`type: private`) o, si
+ * no hay, la de la red utility incorporada (`type: utility`, 10.x). Si se indica
+ * `networkUuid`, se prioriza esa red SDN concreta.
+ */
+export async function getServerPrivateIp(uuid: string, networkUuid?: string): Promise<string | null> {
+  const data = await upcloud<{
+    server: { networking?: { interfaces?: { interface: UpcloudInterface[] } } };
+  }>(`/server/${uuid}`);
+  const ifaces = data.server.networking?.interfaces?.interface ?? [];
+  const v4 = (i: UpcloudInterface) =>
+    i.ip_addresses?.ip_address?.find((a) => a.family === "IPv4")?.address;
+
+  if (networkUuid) {
+    const m = ifaces.find((i) => i.network === networkUuid && v4(i));
+    if (m) return v4(m) ?? null;
+  }
+  const priv = ifaces.find((i) => i.type === "private" && v4(i) && isPrivateIpv4(v4(i)!));
+  if (priv) return v4(priv) ?? null;
+  const util = ifaces.find((i) => i.type === "utility" && v4(i));
+  if (util) return v4(util) ?? null;
+  return null;
+}
+
+/** UUID del servidor UpCloud que tiene esa IP (pública o privada) asignada. */
+export async function findServerUuidByIp(ip: string): Promise<string | null> {
+  const servers = await listServers();
+  const m = servers.find((s) => s.ip_addresses?.ip_address?.some((a) => a.address === ip));
+  return m?.uuid ?? null;
+}
+
 export async function startServer(uuid: string): Promise<void> {
   await upcloud(`/server/${uuid}/start`, { method: "POST" });
 }

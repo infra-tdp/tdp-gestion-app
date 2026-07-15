@@ -7,11 +7,23 @@ import {
   createStagingApp,
   deleteApp,
   deployApp,
+  listServersCoolify,
   redeployByUuid,
   setAppDomain,
   setAppEnvBulk,
   waitForComposeLoaded,
 } from "@/lib/infra/coolify";
+import {
+  cloudflareRoutingConfigured,
+  removeStagingRoute,
+  upsertStagingRoute,
+} from "@/lib/infra/cloudflare";
+import {
+  findServerUuidByIp,
+  getServerPrivateIp,
+  isPrivateIpv4,
+  upcloudConfigured,
+} from "@/lib/infra/upcloud";
 import { createBranch, deleteBranch } from "@/lib/infra/github";
 
 /**
@@ -39,6 +51,58 @@ function genSecret(bytes = 48): string {
 
 async function logStep(envId: number, step: string, ok: boolean, message?: string): Promise<void> {
   await db.insert(schema.stagingEvents).values({ envId, step, ok, message });
+}
+
+/**
+ * IP privada del nodo (la que alcanza cloudflared) para enrutar el entorno,
+ * resuelta DINÁMICAMENTE a partir del servidor de Coolify elegido — así, al
+ * añadir un nodo nuevo no hay que tocar ninguna variable:
+ *   1. STAGING_NODE_IPS (JSON serverUuid→ip): override manual opcional.
+ *   2. IP que reporta Coolify del servidor: si ya es privada (10.x), se usa.
+ *   3. si es pública, se correlaciona en UpCloud (por esa IP) y se lee la IP de
+ *      su interfaz privada/SDN.
+ *   4. último recurso: la IP pública de Coolify.
+ */
+async function resolveNodeIp(serverUuid: string | null): Promise<string | null> {
+  const uuid = serverUuid || process.env.COOLIFY_SERVER_UUID || "";
+
+  // 1. Override manual (normalmente innecesario)
+  const map = process.env.STAGING_NODE_IPS;
+  if (map && uuid) {
+    try {
+      const m = JSON.parse(map) as Record<string, string>;
+      if (m[uuid]) return m[uuid];
+    } catch {
+      // STAGING_NODE_IPS mal formado — seguimos con la resolución dinámica
+    }
+  }
+
+  // 2. IP que reporta Coolify para ese servidor
+  let coolifyIp = "";
+  try {
+    const servers = await listServersCoolify();
+    coolifyIp = servers.find((x) => x.uuid === uuid)?.ip ?? "";
+  } catch {
+    // sin acceso a /servers
+  }
+  if (!coolifyIp || coolifyIp === "host.docker.internal") return null;
+  if (isPrivateIpv4(coolifyIp)) return coolifyIp;
+
+  // 3. IP pública → IP privada vía UpCloud
+  if (upcloudConfigured()) {
+    try {
+      const upUuid = await findServerUuidByIp(coolifyIp);
+      if (upUuid) {
+        const priv = await getServerPrivateIp(upUuid, process.env.UPCLOUD_PRIVATE_NETWORK);
+        if (priv) return priv;
+      }
+    } catch {
+      // UpCloud no respondió — caemos a la IP pública
+    }
+  }
+
+  // 4. Sin privada localizada: la pública como último recurso
+  return coolifyIp;
 }
 
 async function setStatus(
@@ -175,8 +239,13 @@ async function provision(envId: number): Promise<void> {
 
     // 5. Variables de entorno del stack de staging
     const image = `${process.env.GHCR_IMAGE ?? "ghcr.io/infra-tdp/tdp-app-wordpress-prod"}:${env.imageTag}`;
-    const domainBase = process.env.STAGING_DOMAIN_BASE ?? "staging.tallerdelpatinete.es";
-    const fqdn = `${env.slug}.${domainBase}`;
+    // Subdominio de UN SOLO nivel (label con guiones) para que lo cubra el
+    // certificado Universal SSL gratuito de Cloudflare (*.tallerdelpatinete.es).
+    // Un segundo nivel (p. ej. <slug>.staging.tallerdelpatinete.es) exigiría
+    // Advanced Certificate Manager (de pago). STAGING_DOMAIN_BASE = el apex.
+    const domainApex = process.env.STAGING_DOMAIN_BASE ?? "tallerdelpatinete.es";
+    const domainLabelSuffix = process.env.STAGING_DOMAIN_SUFFIX ?? "-staging";
+    const fqdn = `${env.slug}${domainLabelSuffix}.${domainApex}`;
     const dbPass = genSecret(18).replace(/[+/=]/g, "x");
 
     const envs: Record<string, string> = {
@@ -250,6 +319,26 @@ async function provision(envId: number): Promise<void> {
       );
     }
 
+    // 8. Ruta pública dinámica: Cloudflare Tunnel → Traefik del nodo donde vive
+    //    el entorno (la app elige nodo, así que la ruta es por-entorno).
+    if (cloudflareRoutingConfigured()) {
+      try {
+        const nodeIp = await resolveNodeIp(env.serverUuid);
+        if (!nodeIp) {
+          throw new Error("no se pudo resolver la IP del nodo (define STAGING_NODE_IPS o revisa Coolify)");
+        }
+        await upsertStagingRoute(fqdn, nodeIp);
+        await logStep(envId, "route", true, `${fqdn} → ${nodeIp}:80 (Cloudflare Tunnel)`);
+      } catch (err) {
+        await logStep(
+          envId,
+          "route",
+          false,
+          `No se pudo crear la ruta en Cloudflare: ${err instanceof Error ? err.message : err}`,
+        );
+      }
+    }
+
     await setStatus(envId, "active", { url: `https://${fqdn}` });
 
     await db.insert(schema.notifications).values({
@@ -297,6 +386,15 @@ export async function destroyStagingEnv(envId: number): Promise<void> {
   if (!env) throw new Error("Entorno no encontrado");
   await setStatus(envId, "destroying");
   try {
+    // Quita la ruta de Cloudflare (ingress del túnel + DNS) del entorno.
+    if (cloudflareRoutingConfigured() && env.url) {
+      try {
+        await removeStagingRoute(env.url.replace(/^https?:\/\//, ""));
+        await logStep(envId, "route-delete", true, "Ruta de Cloudflare eliminada");
+      } catch (err) {
+        await logStep(envId, "route-delete", false, `Ruta CF no eliminada: ${err instanceof Error ? err.message : err}`);
+      }
+    }
     if (env.coolifyAppUuid) {
       await deleteApp(env.coolifyAppUuid);
       await logStep(envId, "coolify-delete", true, "Recurso de Coolify eliminado (con volúmenes)");
