@@ -48,20 +48,45 @@ type CoolifyServer = { uuid: string; name: string; ip?: string };
 type CoolifyProject = { uuid: string; name: string; description?: string };
 type CoolifyResource = { uuid: string; name: string; type?: string; status?: string };
 
+/**
+ * Normaliza la respuesta de un endpoint de lista de Coolify: acepta tanto un
+ * array plano (`[...]`) como envuelto (`{ data: [...] }`, que usan algunas
+ * versiones/paginación). Si no es ninguna de las dos (p. ej. `coolify()`
+ * devolvió texto porque el cuerpo era HTML de un proxy/login que respondió 200),
+ * lanza un error con una muestra de lo recibido para poder diagnosticarlo.
+ */
+function unwrapList<T>(payload: unknown, label: string): T[] {
+  if (Array.isArray(payload)) return payload as T[];
+  if (payload && typeof payload === "object") {
+    const data = (payload as Record<string, unknown>).data;
+    if (Array.isArray(data)) return data as T[];
+  }
+  const snippet =
+    typeof payload === "string"
+      ? payload.slice(0, 140)
+      : JSON.stringify(payload)?.slice(0, 140) ?? String(payload);
+  throw new Error(
+    `${label} no devolvió una lista (revisa COOLIFY_URL, que apunte a la API y que el token tenga permiso). Respuesta: ${snippet}`,
+  );
+}
+
 export async function listServersCoolify(): Promise<{ uuid: string; name: string; ip: string }[]> {
-  const servers = await coolify<CoolifyServer[]>("/servers");
+  const servers = unwrapList<CoolifyServer>(await coolify("/servers"), "GET /servers");
   return servers.map((s) => ({ uuid: s.uuid, name: s.name, ip: s.ip ?? "" }));
 }
 
 /** Proyectos de Coolify donde alojar el recurso de staging. */
 export async function listProjects(): Promise<{ uuid: string; name: string; description: string }[]> {
-  const projects = await coolify<CoolifyProject[]>("/projects");
+  const projects = unwrapList<CoolifyProject>(await coolify("/projects"), "GET /projects");
   return projects.map((p) => ({ uuid: p.uuid, name: p.name, description: p.description ?? "" }));
 }
 
 /** Recursos (apps/BDs/servicios) desplegados en un servidor. */
 export async function listServerResources(serverUuid: string): Promise<CoolifyResource[]> {
-  return coolify<CoolifyResource[]>(`/servers/${serverUuid}/resources`);
+  return unwrapList<CoolifyResource>(
+    await coolify(`/servers/${serverUuid}/resources`),
+    "GET /servers/{uuid}/resources",
+  );
 }
 
 export type ServerLoad = {
