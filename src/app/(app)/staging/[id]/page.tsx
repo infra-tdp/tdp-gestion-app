@@ -2,8 +2,9 @@ import { notFound } from "next/navigation";
 import { asc, eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { hasPermission, requirePermission } from "@/lib/auth/rbac";
-import { Badge, Card, PageHeader, StatusBadge, formatDate, timeAgo } from "@/components/ui";
+import { Badge, Card, PageHeader, StatusBadge, formatDate, timeAgo, timeUntil } from "@/components/ui";
 import { StagingActions } from "./staging-actions";
+import { AutoRefresh } from "./auto-refresh";
 
 export const dynamic = "force-dynamic";
 
@@ -42,7 +43,8 @@ export default async function StagingDetailPage({ params }: { params: Promise<{ 
         <Badge tone="outline">:{env.imageTag}</Badge>
         <span className="text-muted">de {userName ?? "—"}</span>
         <span className="text-muted">· creado {formatDate(env.createdAt)}</span>
-        {env.expiresAt && <span className="text-muted">· caduca {timeAgo(env.expiresAt).replace("hace", "en")}</span>}
+        {env.expiresAt && <span className="text-muted">· caduca {timeUntil(env.expiresAt)}</span>}
+        {live && <AutoRefresh />}
       </div>
 
       {env.errorMessage && (

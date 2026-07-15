@@ -116,6 +116,18 @@ export function timeAgo(date: Date | string | null | undefined): string {
   return `hace ${Math.floor(seconds / 86400)}d`;
 }
 
+/** Tiempo restante hasta una fecha futura ("en 8h", "en 3d"); si ya pasó, "caducado". */
+export function timeUntil(date: Date | string | null | undefined): string {
+  if (!date) return "—";
+  const d = typeof date === "string" ? new Date(date) : date;
+  const seconds = Math.floor((d.getTime() - Date.now()) / 1000);
+  if (seconds <= 0) return "caducado";
+  if (seconds < 60) return `en ${seconds}s`;
+  if (seconds < 3600) return `en ${Math.floor(seconds / 60)}m`;
+  if (seconds < 86400) return `en ${Math.floor(seconds / 3600)}h`;
+  return `en ${Math.floor(seconds / 86400)}d`;
+}
+
 export function formatDate(date: Date | string | null | undefined): string {
   if (!date) return "—";
   const d = typeof date === "string" ? new Date(date) : date;

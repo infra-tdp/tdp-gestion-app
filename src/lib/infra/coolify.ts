@@ -323,11 +323,20 @@ export async function setAppEnvBulk(appUuid: string, envs: Record<string, string
   }
 }
 
-/** Fija el dominio público del entorno (lo enruta Traefik en el server de Coolify). */
-export async function setAppDomain(appUuid: string, fqdn: string): Promise<void> {
+/**
+ * Fija el dominio público del entorno (lo enruta Traefik en el server de Coolify).
+ * Para apps Docker Compose no se puede usar el campo `domains` — hay que asignar
+ * el dominio a un servicio concreto vía `docker_compose_domains`. El servicio
+ * web del compose de staging es `nginx` (configurable con STAGING_DOMAIN_SERVICE).
+ */
+export async function setAppDomain(
+  appUuid: string,
+  fqdn: string,
+  serviceName = process.env.STAGING_DOMAIN_SERVICE ?? "nginx",
+): Promise<void> {
   await coolify(`/applications/${appUuid}`, {
     method: "PATCH",
-    body: JSON.stringify({ domains: fqdn }),
+    body: JSON.stringify({ docker_compose_domains: [{ name: serviceName, domain: fqdn }] }),
   });
 }
 
