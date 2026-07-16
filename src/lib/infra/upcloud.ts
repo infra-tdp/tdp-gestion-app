@@ -106,11 +106,27 @@ export async function getServerPrivateIp(uuid: string, networkUuid?: string): Pr
   return null;
 }
 
-/** UUID del servidor UpCloud que tiene esa IP (pública o privada) asignada. */
-export async function findServerUuidByIp(ip: string): Promise<string | null> {
+/**
+ * Localiza el servidor UpCloud correlacionando por IP (pública/utility) o, si no
+ * encaja (p. ej. Coolify reporta una IP de overlay tipo ZeroTier que UpCloud no
+ * conoce), por hostname/título (primer label, p. ej. "coolify-prod-2").
+ */
+export async function findServer(opts: { ip?: string; hostname?: string }): Promise<UpcloudServer | null> {
   const servers = await listServers();
-  const m = servers.find((s) => s.ip_addresses?.ip_address?.some((a) => a.address === ip));
-  return m?.uuid ?? null;
+  if (opts.ip) {
+    const byIp = servers.find((s) => s.ip_addresses?.ip_address?.some((a) => a.address === opts.ip));
+    if (byIp) return byIp;
+  }
+  if (opts.hostname) {
+    const label = opts.hostname.split(".")[0].toLowerCase();
+    const byHost = servers.find(
+      (s) =>
+        s.hostname?.toLowerCase().split(".")[0] === label ||
+        s.title?.toLowerCase().includes(label),
+    );
+    if (byHost) return byHost;
+  }
+  return null;
 }
 
 export async function startServer(uuid: string): Promise<void> {

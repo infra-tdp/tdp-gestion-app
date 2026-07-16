@@ -8,23 +8,17 @@ import {
   deleteApp,
   deployApp,
   listServersCoolify,
-  redeployByUuid,
   setAppDomain,
   setAppEnvBulk,
-  waitForComposeLoaded,
+  setComposeRawAndDomain,
 } from "@/lib/infra/coolify";
 import {
   cloudflareRoutingConfigured,
   removeStagingRoute,
   upsertStagingRoute,
 } from "@/lib/infra/cloudflare";
-import {
-  findServerUuidByIp,
-  getServerPrivateIp,
-  isPrivateIpv4,
-  upcloudConfigured,
-} from "@/lib/infra/upcloud";
-import { createBranch, deleteBranch } from "@/lib/infra/github";
+import { findServer, getServerPrivateIp, upcloudConfigured } from "@/lib/infra/upcloud";
+import { createBranch, deleteBranch, getFileContent } from "@/lib/infra/github";
 
 /**
  * Orquestador de entornos staging efímeros de la web tallerdelpatinete.
@@ -54,14 +48,14 @@ async function logStep(envId: number, step: string, ok: boolean, message?: strin
 }
 
 /**
- * IP privada del nodo (la que alcanza cloudflared) para enrutar el entorno,
- * resuelta DINÁMICAMENTE a partir del servidor de Coolify elegido — así, al
- * añadir un nodo nuevo no hay que tocar ninguna variable:
- *   1. STAGING_NODE_IPS (JSON serverUuid→ip): override manual opcional.
- *   2. IP que reporta Coolify del servidor: si ya es privada (10.x), se usa.
- *   3. si es pública, se correlaciona en UpCloud (por esa IP) y se lee la IP de
- *      su interfaz privada/SDN.
- *   4. último recurso: la IP pública de Coolify.
+ * IP de la interfaz privada SDN del nodo (la que alcanza cloudflared) para
+ * enrutar el entorno, resuelta DINÁMICAMENTE a partir del servidor de Coolify
+ * elegido — así, al añadir un nodo nuevo no hay que tocar ninguna variable.
+ *
+ * OJO: la IP que reporta Coolify puede ser una red overlay (ZeroTier, 172.27.x)
+ * que NO es la SDN de UpCloud (10.0.0.x). Por eso NO usamos esa IP directamente:
+ * la usamos solo para correlacionar el servidor en UpCloud (o por hostname) y de
+ * ahí leemos la IP de su interfaz SDN privada.
  */
 async function resolveNodeIp(serverUuid: string | null): Promise<string | null> {
   const uuid = serverUuid || process.env.COOLIFY_SERVER_UUID || "";
@@ -77,32 +71,33 @@ async function resolveNodeIp(serverUuid: string | null): Promise<string | null> 
     }
   }
 
-  // 2. IP que reporta Coolify para ese servidor
-  let coolifyIp = "";
+  // 2. Datos del servidor en Coolify (nombre + IP que reporta, que puede ser una
+  //    overlay tipo ZeroTier, no la SDN que buscamos).
+  let cs: { uuid: string; name: string; ip: string } | undefined;
   try {
     const servers = await listServersCoolify();
-    coolifyIp = servers.find((x) => x.uuid === uuid)?.ip ?? "";
+    cs = servers.find((x) => x.uuid === uuid);
   } catch {
     // sin acceso a /servers
   }
-  if (!coolifyIp || coolifyIp === "host.docker.internal") return null;
-  if (isPrivateIpv4(coolifyIp)) return coolifyIp;
 
-  // 3. IP pública → IP privada vía UpCloud
-  if (upcloudConfigured()) {
+  // 3. IP de la interfaz SDN privada vía UpCloud (correlando por IP o hostname).
+  if (upcloudConfigured() && cs) {
     try {
-      const upUuid = await findServerUuidByIp(coolifyIp);
-      if (upUuid) {
-        const priv = await getServerPrivateIp(upUuid, process.env.UPCLOUD_PRIVATE_NETWORK);
+      const up = await findServer({ ip: cs.ip, hostname: cs.name });
+      if (up) {
+        const priv = await getServerPrivateIp(up.uuid, process.env.UPCLOUD_PRIVATE_NETWORK);
         if (priv) return priv;
       }
     } catch {
-      // UpCloud no respondió — caemos a la IP pública
+      // UpCloud no respondió
     }
   }
 
-  // 4. Sin privada localizada: la pública como último recurso
-  return coolifyIp;
+  // 4. Último recurso: la IP que reporta Coolify (puede ser overlay; se registra
+  //    el resultado en el paso "route" para que se vea si no es la SDN).
+  if (cs?.ip && cs.ip !== "host.docker.internal") return cs.ip;
+  return null;
 }
 
 async function setStatus(
@@ -295,29 +290,32 @@ async function provision(envId: number): Promise<void> {
     await setAppEnvBulk(app.uuid, envs);
     await logStep(envId, "envs", true, `${Object.keys(envs).length} variables configuradas`);
 
-    // 6. Deploy (PRIMERO): Coolify clona y parsea el compose. El dominio de una
-    //    app compose (docker_compose_domains) no se puede fijar hasta que el
-    //    compose está parseado, así que va después.
-    await deployApp(app.uuid);
-    await logStep(envId, "deploy", true, "Deploy lanzado — Coolify clona/construye/arranca; db-restore restaura el backup");
-
-    // 7. Dominio del entorno: esperamos a que el compose cargue, lo fijamos y
-    //    redeployamos para que Traefik enrute el nuevo host. Requiere wildcard
-    //    DNS/túnel hacia el server de Coolify.
+    // 6. Compose + dominio ANTES del deploy. docker_compose_domains ("Domains
+    //    for nginx") exige que Coolify tenga el compose crudo; recién creado está
+    //    vacío, así que lo leemos del repo y lo fijamos junto al dominio. Así el
+    //    dominio queda automático sin esperar al parseo ni redeployar dos veces.
+    //    Origen en http:// (el TLS lo pone Cloudflare en el borde; la URL pública
+    //    es https). Si falla, "Redesplegar" lo reintenta.
     try {
-      const loaded = await waitForComposeLoaded(app.uuid);
-      if (!loaded) throw new Error("Coolify tardó demasiado en cargar el compose");
-      await setAppDomain(app.uuid, `https://${fqdn}`);
-      await redeployByUuid(app.uuid);
-      await logStep(envId, "domain", true, `https://${fqdn} (aplicado con redeploy)`);
+      const composeRaw = await getFileContent(
+        composeLocation,
+        env.branch,
+        process.env.WEB_REPO ?? "tdp-app-wordpress-prod",
+      );
+      await setComposeRawAndDomain(app.uuid, composeRaw, `http://${fqdn}`);
+      await logStep(envId, "domain", true, `http://${fqdn} (servicio nginx)`);
     } catch (err) {
       await logStep(
         envId,
         "domain",
         false,
-        `No se pudo fijar el dominio automáticamente: ${err instanceof Error ? err.message : err}. Cuando termine el primer deploy, pulsa "Redesplegar".`,
+        `No se pudo fijar el dominio automáticamente: ${err instanceof Error ? err.message : err}. Cuando arranque, pulsa "Redesplegar".`,
       );
     }
+
+    // 7. Deploy (una sola vez, ya con el dominio configurado)
+    await deployApp(app.uuid);
+    await logStep(envId, "deploy", true, "Deploy lanzado — construye/arranca; db-restore restaura el backup");
 
     // 8. Ruta pública dinámica: Cloudflare Tunnel → Traefik del nodo donde vive
     //    el entorno (la app elige nodo, así que la ruta es por-entorno).
@@ -370,7 +368,8 @@ export async function redeployStagingEnv(envId: number): Promise<void> {
   if (!env.coolifyAppUuid) throw new Error("El entorno aún no tiene recurso en Coolify");
   if (env.url) {
     try {
-      await setAppDomain(env.coolifyAppUuid, env.url);
+      // Origen en http:// (el TLS lo pone Cloudflare); la URL pública es https.
+      await setAppDomain(env.coolifyAppUuid, env.url.replace(/^https:/, "http:"));
       await logStep(envId, "domain", true, `${env.url} (fijado en redeploy)`);
     } catch (err) {
       await logStep(envId, "domain", false, `Dominio no fijado: ${err instanceof Error ? err.message : err}`);

@@ -48,6 +48,30 @@ export function githubConfigured(): boolean {
   return Boolean(process.env.GITHUB_TOKEN);
 }
 
+/** Contenido (texto) de un fichero del repo en una rama/ref concreta. */
+export async function getFileContent(path: string, ref: string, repo = webRepo()): Promise<string> {
+  const token = process.env.GITHUB_TOKEN;
+  if (!token) throw new Error("GITHUB_TOKEN no configurado");
+  const clean = path.replace(/^\/+/, "");
+  const res = await fetch(
+    `${API}/repos/${org()}/${repo}/contents/${clean}?ref=${encodeURIComponent(ref)}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github.raw+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+      cache: "no-store",
+      signal: AbortSignal.timeout(20000),
+    },
+  );
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`GitHub GET contents/${clean}@${ref} → ${res.status}: ${body.slice(0, 200)}`);
+  }
+  return res.text();
+}
+
 /** SHA actual de main del repo de la web. */
 export async function getMainSha(repo = webRepo()): Promise<string> {
   const data = await gh<{ object: { sha: string } }>(`/repos/${org()}/${repo}/git/ref/heads/main`);
