@@ -292,6 +292,10 @@ export async function createStagingApp(params: {
       name: params.name,
       description: params.description ?? "Entorno staging efímero (TDP Gestión)",
       instant_deploy: false,
+      // Desactivamos el auto-deploy por webhook: el push que crea la rama
+      // staging dispararía un build extra además del que lanzamos por API.
+      // Los deploys los orquesta la app (deploy inicial + redeploys).
+      is_auto_deploy_enabled: false,
     }),
   });
 }
