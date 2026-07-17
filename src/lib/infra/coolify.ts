@@ -292,6 +292,10 @@ export async function createStagingApp(params: {
       name: params.name,
       description: params.description ?? "Entorno staging efímero (TDP Gestión)",
       instant_deploy: false,
+      // Desactivamos el auto-deploy por webhook: el push que crea la rama
+      // staging dispararía un build extra además del que lanzamos por API.
+      // Los deploys los orquesta la app (deploy inicial + redeploys).
+      is_auto_deploy_enabled: false,
     }),
   });
 }
@@ -337,6 +341,28 @@ export async function setAppDomain(
   await coolify(`/applications/${appUuid}`, {
     method: "PATCH",
     body: JSON.stringify({ docker_compose_domains: [{ name: serviceName, domain: fqdn }] }),
+  });
+}
+
+/**
+ * Fija el compose crudo Y el dominio del servicio web en una sola llamada, ANTES
+ * del primer deploy. `docker_compose_domains` exige que el compose esté cargado
+ * (docker_compose_raw no vacío); como recién creado está vacío, lo rellenamos
+ * nosotros con el contenido del repo. Así el dominio queda automático sin esperar
+ * a que Coolify parsee ni tener que redeployar dos veces.
+ */
+export async function setComposeRawAndDomain(
+  appUuid: string,
+  composeRaw: string,
+  fqdn: string,
+  serviceName = process.env.STAGING_DOMAIN_SERVICE ?? "nginx",
+): Promise<void> {
+  await coolify(`/applications/${appUuid}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      docker_compose_raw: composeRaw,
+      docker_compose_domains: [{ name: serviceName, domain: fqdn }],
+    }),
   });
 }
 
