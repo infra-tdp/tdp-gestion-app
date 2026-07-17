@@ -2,7 +2,7 @@ import Link from "next/link";
 import { desc, eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { requirePermission } from "@/lib/auth/rbac";
-import { Card, PageHeader, StatusBadge, timeAgo } from "@/components/ui";
+import { Card, PageHeader, StatusBadge, timeUntil } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Staging devs" };
@@ -65,7 +65,7 @@ export default async function StagingListPage() {
                   )}
                 </td>
                 <td className="text-muted">{userName ?? "—"}</td>
-                <td className="text-muted">{env.expiresAt ? timeAgo(env.expiresAt).replace("hace", "en") : "—"}</td>
+                <td className="text-muted">{env.expiresAt ? timeUntil(env.expiresAt) : "—"}</td>
               </tr>
             ))}
             {envs.length === 0 && (
