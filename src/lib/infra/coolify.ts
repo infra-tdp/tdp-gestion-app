@@ -353,24 +353,40 @@ export async function getApp(appUuid: string): Promise<Record<string, unknown>> 
 }
 
 /**
- * Espera a que Coolify haya clonado y parseado el compose (docker_compose_raw
- * deja de estar vacío). Necesario antes de fijar `docker_compose_domains`, que
- * si no falla con "Cannot set docker_compose_domains without docker_compose_raw".
- * Devuelve true si cargó dentro del timeout.
+ * Fija el dominio del servicio web reintentando hasta que Coolify haya parseado
+ * el compose.
+ *
+ * OJO: la API de Coolify NO expone `docker_compose_raw` en el GET de la app (solo
+ * `compose_parsing_version`, `docker_compose_domains`, `docker_compose_location`…),
+ * así que NO se puede "esperar a que se cargue" sondeando ese campo. En cambio,
+ * `setAppDomain` (PATCH docker_compose_domains) responde 200 en cuanto el compose
+ * está parseado y 422 ("...without docker_compose_raw") mientras no lo está. Por
+ * eso probamos la OPERACIÓN REAL y reintentamos SOLO ante ese 422 transitorio;
+ * cualquier otro error (auth, dominio inválido, 5xx persistente) se propaga.
  */
-export async function waitForComposeLoaded(appUuid: string, timeoutMs = 180000): Promise<boolean> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
+export async function setAppDomainWhenReady(
+  appUuid: string,
+  fqdn: string,
+  serviceName = process.env.STAGING_DOMAIN_SERVICE ?? "nginx",
+  attempts = 30,
+  delayMs = 5000,
+): Promise<void> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
     try {
-      const app = await getApp(appUuid);
-      const raw = app["docker_compose_raw"] ?? app["docker_compose"];
-      if (typeof raw === "string" && raw.trim().length > 0) return true;
-    } catch {
-      // reintenta hasta el timeout
+      await setAppDomain(appUuid, fqdn, serviceName);
+      return;
+    } catch (err) {
+      lastErr = err;
+      const msg = err instanceof Error ? err.message : String(err);
+      const composeNotReady = /docker_compose_raw|without docker_compose|not been parsed|still.*pars/i.test(msg);
+      if (!composeNotReady) throw err;
+      await new Promise((r) => setTimeout(r, delayMs));
     }
-    await new Promise((r) => setTimeout(r, 5000));
   }
-  return false;
+  throw lastErr instanceof Error
+    ? lastErr
+    : new Error("No se pudo fijar el dominio: Coolify no parseó el compose a tiempo");
 }
 
 export async function deleteApp(appUuid: string): Promise<void> {
