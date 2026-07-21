@@ -22,6 +22,10 @@ sin imágenes inmutables).
   la imagen de producción automáticamente).
 - **Usuarios y RBAC** — ADMIN · INFRA · DEV · STORE · VIEWER.
 - **Asistente IA** — Claude con herramientas sobre el estado real del sistema.
+- **Agente WhatsApp** — administración del agente de tareas
+  ([`tdp-agente-tareas`](https://github.com/infra-tdp/tdp-agente-tareas)):
+  chats monitorizados, mapeo de personas a Jira, modo shadow/activo y
+  auditoría (ver [`docs/agente-tareas.md`](docs/agente-tareas.md)).
 
 ## Stack
 

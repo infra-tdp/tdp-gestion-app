@@ -63,6 +63,9 @@ services:
       MONITOR_DEFAULTS: "${MONITOR_DEFAULTS:-}"
       # --- Asistente IA ---
       ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      # --- Agente de tareas WhatsApp (módulo /agente) ---
+      TASK_AGENT_URL: "${TASK_AGENT_URL:-}"
+      TASK_AGENT_TOKEN: "${TASK_AGENT_TOKEN:-}"
     volumes:
       - tofu_data:/data
     # Mismo patrón que el compose que ya despliega bien (tdp-app-wordpress-prod,
