@@ -9,6 +9,7 @@ import {
   GitPullRequest,
   KeyRound,
   LayoutDashboard,
+  MessageCircle,
   Radio,
   Server,
   ShieldCheck,
@@ -31,6 +32,7 @@ const ICONS = {
   keys: KeyRound,
   bot: Bot,
   bell: Bell,
+  whatsapp: MessageCircle,
 };
 
 export function Sidebar({

@@ -8,7 +8,7 @@ import { Sidebar } from "@/components/sidebar";
 
 export const dynamic = "force-dynamic";
 
-const NAV: { href: string; label: string; icon: "dashboard" | "server" | "workflow" | "radio" | "apps" | "staging" | "users" | "roles" | "keys" | "bot" | "bell"; permission?: Permission }[] = [
+const NAV: { href: string; label: string; icon: "dashboard" | "server" | "workflow" | "radio" | "apps" | "staging" | "users" | "roles" | "keys" | "bot" | "bell" | "whatsapp"; permission?: Permission }[] = [
   { href: "/", label: "Dashboard", icon: "dashboard" },
   { href: "/infra/nodes", label: "Nodos", icon: "server", permission: "infra.view" },
   { href: "/infra/tofu", label: "OpenTofu", icon: "workflow", permission: "tofu.view" },
@@ -17,6 +17,7 @@ const NAV: { href: string; label: string; icon: "dashboard" | "server" | "workfl
   { href: "/staging", label: "Staging devs", icon: "staging", permission: "staging.view" },
   { href: "/notificaciones", label: "Notificaciones", icon: "bell" },
   { href: "/asistente", label: "Asistente IA", icon: "bot", permission: "ai.use" },
+  { href: "/agente", label: "Agente WhatsApp", icon: "whatsapp", permission: "agente.view" },
   { href: "/settings/ssh-keys", label: "Claves SSH", icon: "keys" },
   { href: "/admin/users", label: "Usuarios", icon: "users", permission: "users.manage" },
   { href: "/admin/roles", label: "Roles y permisos", icon: "roles", permission: "roles.manage" },

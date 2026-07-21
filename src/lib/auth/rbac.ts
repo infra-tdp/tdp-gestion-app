@@ -29,6 +29,8 @@ const DEFAULT_PERMISSIONS = {
   "pr.create": ["ADMIN", "INFRA", "DEV"],
   "pr.merge": ["ADMIN", "INFRA"],
   "ai.use": ["ADMIN", "INFRA", "DEV"],
+  "agente.view": ["ADMIN", "INFRA", "DEV"],
+  "agente.manage": ["ADMIN", "INFRA"],
   "users.manage": ["ADMIN"],
   "roles.manage": ["ADMIN"],
 } as const satisfies Record<string, readonly Role[]>;
@@ -58,6 +60,8 @@ export const PERMISSION_META: Record<Permission, { module: string; label: string
   "pr.create": { module: "Pull requests", label: "Abrir PRs desde el panel" },
   "pr.merge": { module: "Pull requests", label: "Mergear PRs" },
   "ai.use": { module: "Asistente", label: "Usar el asistente IA" },
+  "agente.view": { module: "Agente WhatsApp", label: "Ver el agente de tareas" },
+  "agente.manage": { module: "Agente WhatsApp", label: "Configurar chats, personas y modo del agente" },
   "users.manage": { module: "Administración", label: "Gestionar usuarios (bloqueado: ADMIN)" },
   "roles.manage": { module: "Administración", label: "Configurar roles/permisos (bloqueado: ADMIN)" },
 };

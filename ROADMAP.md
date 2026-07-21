@@ -69,6 +69,21 @@ traspasos entre tiendas ni “pendiente de recibir” → eso vive en nuestra BD
 - **Descuadres**: diff entre stock esperado (nuestros movimientos) y el real
   de SatTPV → notificación.
 
+## 🚧 Agente de tareas WhatsApp (repo `tdp-agente-tareas`)
+
+Adelanto de IA transversal (fase 5) que ya está en marcha: un agente vinculado
+a un número de WhatsApp vía **Evolution API** que observa los grupos que se
+configuren, entiende texto/**notas de voz**/**vídeos**, y mantiene **Jira** al
+día sin crear tickets duplicados (crear/comentar/repriorizar/reasignar/cerrar).
+
+- El servicio (webhook, pipeline de medios, bucle Claude+herramientas, API
+  interna) vive en `tdp-agente-tareas` — solo infra desplegable en Coolify.
+- TODA la administración vive aquí, en el módulo **`/agente`**: chats
+  monitorizados, mapeo personas→Jira, modo shadow/activo, instrucciones y
+  auditoría de ejecuciones (ver [`docs/agente-tareas.md`](docs/agente-tareas.md)).
+- Arranca en modo **shadow** (registra qué haría sin ejecutarlo) para validar
+  su criterio con tráfico real antes de activarlo.
+
 ## 🔜 FASE 4 — Notificaciones multicanal + N8N
 
 - Eventos: venta de patinete, rotura de stock, bajo mínimo, recepción
