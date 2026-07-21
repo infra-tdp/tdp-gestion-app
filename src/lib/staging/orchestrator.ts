@@ -10,7 +10,7 @@ import {
   listServersCoolify,
   setAppDomain,
   setAppEnvBulk,
-  setComposeRawAndDomain,
+  waitForComposeLoaded,
 } from "@/lib/infra/coolify";
 import {
   cloudflareRoutingConfigured,
@@ -18,7 +18,7 @@ import {
   upsertStagingRoute,
 } from "@/lib/infra/cloudflare";
 import { findServer, getServerPrivateIp, upcloudConfigured } from "@/lib/infra/upcloud";
-import { createBranch, deleteBranch, getFileContent } from "@/lib/infra/github";
+import { createBranch, deleteBranch } from "@/lib/infra/github";
 
 /**
  * Orquestador de entornos staging efímeros de la web tallerdelpatinete.
@@ -290,32 +290,63 @@ async function provision(envId: number): Promise<void> {
     await setAppEnvBulk(app.uuid, envs);
     await logStep(envId, "envs", true, `${Object.keys(envs).length} variables configuradas`);
 
-    // 6. Compose + dominio ANTES del deploy. docker_compose_domains ("Domains
-    //    for nginx") exige que Coolify tenga el compose crudo; recién creado está
-    //    vacío, así que lo leemos del repo y lo fijamos junto al dominio. Así el
-    //    dominio queda automático sin esperar al parseo ni redeployar dos veces.
-    //    Origen en http:// (el TLS lo pone Cloudflare en el borde; la URL pública
-    //    es https). Si falla, "Redesplegar" lo reintenta.
-    try {
-      const composeRaw = await getFileContent(
-        composeLocation,
-        env.branch,
-        process.env.WEB_REPO ?? "tdp-app-wordpress-prod",
-      );
-      await setComposeRawAndDomain(app.uuid, composeRaw, `http://${fqdn}`);
-      await logStep(envId, "domain", true, `http://${fqdn} (servicio nginx)`);
-    } catch (err) {
-      await logStep(
-        envId,
-        "domain",
-        false,
-        `No se pudo fijar el dominio automáticamente: ${err instanceof Error ? err.message : err}. Cuando arranque, pulsa "Redesplegar".`,
-      );
+    // 6. Deploy + dominio. Para apps de compose leídas desde git, Coolify NO
+    //    permite fijar `docker_compose_raw` por API ("This field is not allowed"):
+    //    el compose lo clona y parsea ÉL. Y `docker_compose_domains` ("Domains
+    //    for nginx") solo se puede fijar cuando ese parseo ya ocurrió (si no:
+    //    "Cannot set docker_compose_domains without docker_compose_raw"). Además,
+    //    las labels de Traefik del dominio solo llegan al contenedor en un deploy.
+    //    Secuencia robusta:
+    //      a) si Coolify ya parseó el compose al crear la app (algunas versiones
+    //         lo hacen) → fijamos el dominio y basta UN deploy con las labels;
+    //      b) si no → deploy inicial (fuerza el parseo) → esperar → fijar dominio
+    //         → redeploy que aplica las labels.
+    //    Origen en http:// (el TLS lo pone Cloudflare en el borde; la URL es https).
+    const httpOrigin = `http://${fqdn}`;
+    let domainSet = false;
+
+    // (a) Ruta rápida: ¿el compose ya está parseado nada más crear la app?
+    if (await waitForComposeLoaded(app.uuid, 15000)) {
+      try {
+        await setAppDomain(app.uuid, httpOrigin);
+        domainSet = true;
+        await logStep(envId, "domain", true, `${httpOrigin} (servicio nginx)`);
+      } catch {
+        // No pasa nada: caemos a la ruta (b) de dos deploys.
+      }
     }
 
-    // 7. Deploy (una sola vez, ya con el dominio configurado)
+    // Deploy inicial. Si ya fijamos el dominio, este ya arranca con las labels.
     await deployApp(app.uuid);
-    await logStep(envId, "deploy", true, "Deploy lanzado — construye/arranca; db-restore restaura el backup");
+    await logStep(
+      envId,
+      "deploy",
+      true,
+      domainSet
+        ? "Deploy lanzado (con dominio) — construye/arranca; db-restore restaura el backup"
+        : "Deploy inicial lanzado — Coolify clona y parsea el compose",
+    );
+
+    // (b) El compose se parsea durante el deploy: esperamos, fijamos el dominio y
+    //     redeployamos para que los contenedores se recreen con las labels.
+    if (!domainSet) {
+      try {
+        if (!(await waitForComposeLoaded(app.uuid))) {
+          throw new Error("Coolify no terminó de parsear el compose a tiempo");
+        }
+        await setAppDomain(app.uuid, httpOrigin);
+        await logStep(envId, "domain", true, `${httpOrigin} (servicio nginx)`);
+        await deployApp(app.uuid);
+        await logStep(envId, "domain-redeploy", true, "Redeploy para aplicar el dominio en Traefik");
+      } catch (err) {
+        await logStep(
+          envId,
+          "domain",
+          false,
+          `No se pudo fijar el dominio automáticamente: ${err instanceof Error ? err.message : err}. Cuando arranque, pulsa "Redesplegar".`,
+        );
+      }
+    }
 
     // 8. Ruta pública dinámica: Cloudflare Tunnel → Traefik del nodo donde vive
     //    el entorno (la app elige nodo, así que la ruta es por-entorno).
@@ -368,6 +399,11 @@ export async function redeployStagingEnv(envId: number): Promise<void> {
   if (!env.coolifyAppUuid) throw new Error("El entorno aún no tiene recurso en Coolify");
   if (env.url) {
     try {
+      // El compose ya se parseó en el primer deploy, pero lo confirmamos por si
+      // aquel falló: docker_compose_domains exige docker_compose_raw cargado.
+      if (!(await waitForComposeLoaded(env.coolifyAppUuid, 30000))) {
+        throw new Error("Coolify aún no ha parseado el compose (¿el primer deploy no llegó a arrancar?)");
+      }
       // Origen en http:// (el TLS lo pone Cloudflare); la URL pública es https.
       await setAppDomain(env.coolifyAppUuid, env.url.replace(/^https:/, "http:"));
       await logStep(envId, "domain", true, `${env.url} (fijado en redeploy)`);
