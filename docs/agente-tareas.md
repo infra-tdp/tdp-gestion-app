@@ -23,8 +23,11 @@ TASK_AGENT_TOKEN=<AGENT_ADMIN_TOKEN del agente>
 ```
 
 Sin ellas, la página muestra cómo completar la configuración. El despliegue
-completo (Evolution API + agente + webhook) está documentado en
-`docs/despliegue.md` del repo del agente.
+completo está documentado en `docs/despliegue.md` del repo del agente: su
+`docker-compose.yaml` levanta TODO el stack (agente + Evolution API + Redis, y
+n8n opcional) y su workflow de GitHub Actions crea el recurso en Coolify por
+API con las variables desde GitHub — Coolify es efímero y se reconstruye sin
+configuración manual.
 
 ## Qué se administra desde aquí
 

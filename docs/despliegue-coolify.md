@@ -6,6 +6,23 @@ Coolify clona este repo, hace build con el `Dockerfile` vía el
 de UpCloud** (el compose no levanta ninguna; su servicio `db` es solo para
 desarrollo local con `--profile local-db`).
 
+> **Coolify es efímero — flujo recomendado sin configuración manual.**
+> Todo lo que necesita Coolify está en el repo, y las variables viven como
+> **Secrets/Variables del repo en GitHub** (mismos nombres que
+> `.env.example`; el PAT se llama `TDP_GITHUB_TOKEN` y la org
+> `TDP_GITHUB_ORG` — Actions no permite el prefijo `GITHUB_`). El workflow
+> [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml):
+>
+> - **bootstrap** (Run workflow, manual): crea el recurso por API en un
+>   Coolify nuevo, sincroniza envs, fija el dominio (`GESTION_DOMAIN`) y
+>   despliega — guarda `COOLIFY_APP_UUID` como variable del repo.
+> - **deploy** (en cada push a main, o manual): re-sincroniza envs/dominio y
+>   fuerza el deploy. Idempotente.
+>
+> Los pasos 1–3 de abajo describen el equivalente manual en la UI, útil como
+> referencia; con el workflow no hacen falta. `COOLIFY_API_URL` debe ser
+> alcanzable desde los runners de GitHub (la URL pública del panel).
+
 ## 0. Base de datos (una vez, en la PostgreSQL gestionada)
 
 Conéctate con el usuario admin del panel de UpCloud y crea usuario y BD:
