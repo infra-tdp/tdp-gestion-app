@@ -34,27 +34,31 @@ concurrency:
   group: coolify-deploy
   cancel-in-progress: false
 
+# Cada valor se toma de Secrets O de Variables indistintamente
+# (secrets.X || vars.X): así da igual dónde lo hayas guardado. La URL y los
+# UUIDs de Coolify no son sensibles y funcionan bien como Variables visibles;
+# las claves y contraseñas deberían ir en Secrets.
 env:
   # --- Coolify (API; la app usa los mismos valores en runtime) ---
-  COOLIFY_API_URL: ${{ secrets.COOLIFY_API_URL }}
-  COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
-  COOLIFY_PROJECT_UUID: ${{ secrets.COOLIFY_PROJECT_UUID }}
-  COOLIFY_SERVER_UUID: ${{ secrets.COOLIFY_SERVER_UUID }}
-  COOLIFY_GITHUB_APP_UUID: ${{ secrets.COOLIFY_GITHUB_APP_UUID }}
+  COOLIFY_API_URL: ${{ secrets.COOLIFY_API_URL || vars.COOLIFY_API_URL }}
+  COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN || vars.COOLIFY_TOKEN }}
+  COOLIFY_PROJECT_UUID: ${{ secrets.COOLIFY_PROJECT_UUID || vars.COOLIFY_PROJECT_UUID }}
+  COOLIFY_SERVER_UUID: ${{ secrets.COOLIFY_SERVER_UUID || vars.COOLIFY_SERVER_UUID }}
+  COOLIFY_GITHUB_APP_UUID: ${{ secrets.COOLIFY_GITHUB_APP_UUID || vars.COOLIFY_GITHUB_APP_UUID }}
   COOLIFY_ENVIRONMENT_NAME: ${{ vars.COOLIFY_ENVIRONMENT_NAME }}
   COOLIFY_APP_UUID: ${{ vars.COOLIFY_APP_UUID }}
   DEPLOY_BRANCH: ${{ vars.DEPLOY_BRANCH }}
   GESTION_DOMAIN: ${{ vars.GESTION_DOMAIN }}
   # --- App ---
-  DATABASE_URL: ${{ secrets.DATABASE_URL }}
-  DATABASE_CA_CERT: ${{ secrets.DATABASE_CA_CERT }}
-  AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
+  DATABASE_URL: ${{ secrets.DATABASE_URL || vars.DATABASE_URL }}
+  DATABASE_CA_CERT: ${{ secrets.DATABASE_CA_CERT || vars.DATABASE_CA_CERT }}
+  AUTH_SECRET: ${{ secrets.AUTH_SECRET || vars.AUTH_SECRET }}
   ADMIN_EMAIL: ${{ vars.ADMIN_EMAIL }}
-  ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
-  UPCLOUD_USERNAME: ${{ secrets.UPCLOUD_USERNAME }}
-  UPCLOUD_PASSWORD: ${{ secrets.UPCLOUD_PASSWORD }}
-  PG_CONN_STR: ${{ secrets.PG_CONN_STR }}
-  TDP_GITHUB_TOKEN: ${{ secrets.TDP_GITHUB_TOKEN }}
+  ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD || vars.ADMIN_PASSWORD }}
+  UPCLOUD_USERNAME: ${{ secrets.UPCLOUD_USERNAME || vars.UPCLOUD_USERNAME }}
+  UPCLOUD_PASSWORD: ${{ secrets.UPCLOUD_PASSWORD || vars.UPCLOUD_PASSWORD }}
+  PG_CONN_STR: ${{ secrets.PG_CONN_STR || vars.PG_CONN_STR }}
+  TDP_GITHUB_TOKEN: ${{ secrets.TDP_GITHUB_TOKEN || vars.TDP_GITHUB_TOKEN }}
   TDP_GITHUB_ORG: ${{ vars.TDP_GITHUB_ORG }}
   WEB_REPO: ${{ vars.WEB_REPO }}
   INFRA_REPO: ${{ vars.INFRA_REPO }}
@@ -62,31 +66,31 @@ env:
   S3_ENDPOINT: ${{ vars.S3_ENDPOINT }}
   S3_REGION: ${{ vars.S3_REGION }}
   S3_BUCKET_BACKUPS: ${{ vars.S3_BUCKET_BACKUPS }}
-  S3_BACKUP_ACCESS_KEY: ${{ secrets.S3_BACKUP_ACCESS_KEY }}
-  S3_BACKUP_SECRET_KEY: ${{ secrets.S3_BACKUP_SECRET_KEY }}
+  S3_BACKUP_ACCESS_KEY: ${{ secrets.S3_BACKUP_ACCESS_KEY || vars.S3_BACKUP_ACCESS_KEY }}
+  S3_BACKUP_SECRET_KEY: ${{ secrets.S3_BACKUP_SECRET_KEY || vars.S3_BACKUP_SECRET_KEY }}
   S3_BACKUPS_PREFIX: ${{ vars.S3_BACKUPS_PREFIX }}
-  BACKUP_GPG_PASSPHRASE: ${{ secrets.BACKUP_GPG_PASSPHRASE }}
+  BACKUP_GPG_PASSPHRASE: ${{ secrets.BACKUP_GPG_PASSPHRASE || vars.BACKUP_GPG_PASSPHRASE }}
   S3_BUCKET_MEDIA: ${{ vars.S3_BUCKET_MEDIA }}
   TDP_CDN_DOMAIN: ${{ vars.TDP_CDN_DOMAIN }}
   STAGING_DOMAIN_BASE: ${{ vars.STAGING_DOMAIN_BASE }}
   STAGING_DOMAIN_SUFFIX: ${{ vars.STAGING_DOMAIN_SUFFIX }}
   STAGING_DEVBOX_HOST: ${{ vars.STAGING_DEVBOX_HOST }}
   STAGING_DEVBOX_PORT_BASE: ${{ vars.STAGING_DEVBOX_PORT_BASE }}
-  STAGING_GIT_TOKEN: ${{ secrets.STAGING_GIT_TOKEN }}
+  STAGING_GIT_TOKEN: ${{ secrets.STAGING_GIT_TOKEN || vars.STAGING_GIT_TOKEN }}
   STAGING_COMPOSE_LOCATION: ${{ vars.STAGING_COMPOSE_LOCATION }}
   STAGING_COMPOSE_BUILD_LOCATION: ${{ vars.STAGING_COMPOSE_BUILD_LOCATION }}
   STAGING_DISABLE_PLUGINS: ${{ vars.STAGING_DISABLE_PLUGINS }}
-  CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-  CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
-  CF_TUNNEL_ID: ${{ secrets.CF_TUNNEL_ID }}
-  CF_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
+  CF_API_TOKEN: ${{ secrets.CF_API_TOKEN || vars.CF_API_TOKEN }}
+  CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID || vars.CF_ACCOUNT_ID }}
+  CF_TUNNEL_ID: ${{ secrets.CF_TUNNEL_ID || vars.CF_TUNNEL_ID }}
+  CF_ZONE_ID: ${{ secrets.CF_ZONE_ID || vars.CF_ZONE_ID }}
   UPCLOUD_PRIVATE_NETWORK: ${{ vars.UPCLOUD_PRIVATE_NETWORK }}
   STAGING_NODE_IPS: ${{ vars.STAGING_NODE_IPS }}
   MONITOR_DEFAULTS: ${{ vars.MONITOR_DEFAULTS }}
-  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY || vars.ANTHROPIC_API_KEY }}
   ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL }}
   TASK_AGENT_URL: ${{ vars.TASK_AGENT_URL }}
-  TASK_AGENT_TOKEN: ${{ secrets.TASK_AGENT_TOKEN }}
+  TASK_AGENT_TOKEN: ${{ secrets.TASK_AGENT_TOKEN || vars.TASK_AGENT_TOKEN }}
 
 jobs:
   bootstrap:
