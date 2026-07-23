@@ -174,7 +174,7 @@ export function PersonRow({
             name="taskAccountId"
             className="tdp-input"
             defaultValue={person.taskAccountId ?? ""}
-            placeholder="accountId de Jira"
+            placeholder="id / email del usuario"
           />
         )}
       </div>
