@@ -74,6 +74,10 @@ export type AgentTaskLink = {
   assignee: string | null;
   lastAction: string;
   updatedAt: string;
+  /** URL al ticket en el gestor (Linear/Jira). */
+  url?: string | null;
+  /** true si está cerrado (el panel solo lista abiertos por defecto). */
+  done?: boolean;
 };
 
 export type AssignableUser = { accountId: string; displayName: string; email: string | null };

@@ -202,8 +202,11 @@ export default async function AgentePage({
 
       <Card className="mb-4" accent={false}>
         <h2 className="headline text-2xl mb-3">Tickets vinculados</h2>
+        <p className="text-muted text-[12px] mb-3">
+          Estado en vivo desde {overview.provider.name}. Se muestran solo los tickets abiertos.
+        </p>
         {tasks.length === 0 ? (
-          <div className="text-muted text-sm">El agente todavía no ha creado ni tocado ningún ticket.</div>
+          <div className="text-muted text-sm">No hay tickets abiertos vinculados a los chats.</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-[13px]">
@@ -221,7 +224,15 @@ export default async function AgentePage({
               <tbody>
                 {tasks.map((t) => (
                   <tr key={t.id} className="border-t border-border-dark">
-                    <td className="py-2 pr-3 font-bold text-primary">{t.taskKey}</td>
+                    <td className="py-2 pr-3 font-bold text-primary">
+                      {t.url ? (
+                        <a href={t.url} target="_blank" rel="noreferrer" className="hover:underline">
+                          {t.taskKey}
+                        </a>
+                      ) : (
+                        t.taskKey
+                      )}
+                    </td>
                     <td className="py-2 pr-3">{t.summary || "—"}</td>
                     <td className="py-2 pr-3">{t.status || "—"}</td>
                     <td className="py-2 pr-3">{t.priority ?? "—"}</td>
