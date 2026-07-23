@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { hasPermission, requirePermission } from "@/lib/auth/rbac";
 import {
   agentConfigured,
@@ -5,6 +6,7 @@ import {
   type AgentChat,
   type AgentOverview,
   type AgentPerson,
+  type AgentRun,
   type AgentTaskLink,
   type AssignableUser,
 } from "@/lib/agente/client";
@@ -19,7 +21,13 @@ import {
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Agente WhatsApp" };
 
-export default async function AgentePage() {
+const RUNS_PER_PAGE = 15;
+
+export default async function AgentePage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const user = await requirePermission("agente.view");
   const canManage = hasPermission(user.role, "agente.manage");
 
@@ -35,12 +43,19 @@ export default async function AgentePage() {
     );
   }
 
-  const [overviewRes, chatsRes, peopleRes, tasksRes, usersRes] = await Promise.all([
+  const sp = await searchParams;
+  const epRaw = Array.isArray(sp.ep) ? sp.ep[0] : sp.ep;
+  const runsPage = Math.max(1, Number(epRaw) || 1);
+  const runsOffset = (runsPage - 1) * RUNS_PER_PAGE;
+
+  const [overviewRes, chatsRes, peopleRes, tasksRes, usersRes, runsRes] = await Promise.all([
     agentFetch<AgentOverview>("/admin/overview"),
     agentFetch<AgentChat[]>("/admin/chats"),
     agentFetch<AgentPerson[]>("/admin/people"),
     agentFetch<AgentTaskLink[]>("/admin/tasks"),
     agentFetch<AssignableUser[]>("/admin/provider/users?q="),
+    // Pedimos uno de más para saber si hay página siguiente sin un count aparte.
+    agentFetch<AgentRun[]>(`/admin/runs?limit=${RUNS_PER_PAGE + 1}&offset=${runsOffset}`),
   ]);
 
   if (!overviewRes.ok) {
@@ -57,6 +72,12 @@ export default async function AgentePage() {
   const people = peopleRes.ok ? peopleRes.data : [];
   const tasks = tasksRes.ok ? tasksRes.data : [];
   const assignableUsers = usersRes.ok ? usersRes.data : [];
+
+  // Ejecuciones paginadas (fallback a las del overview si el endpoint fallara).
+  const runsRaw = runsRes.ok ? runsRes.data : runsPage === 1 ? overview.lastRuns : [];
+  const runs = runsRaw.slice(0, RUNS_PER_PAGE);
+  const hasPrevRuns = runsPage > 1;
+  const hasNextRuns = runsRaw.length > RUNS_PER_PAGE;
 
   const instanceOk = overview.instance.state === "open";
   const shadow = overview.settings.mode === "shadow";
@@ -208,15 +229,37 @@ export default async function AgentePage() {
       </Card>
 
       <Card accent={false}>
-        <h2 className="headline text-2xl mb-3">Últimas ejecuciones</h2>
-        {overview.lastRuns.length === 0 ? (
+        <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+          <h2 className="headline text-2xl">Últimas ejecuciones</h2>
+          {(hasPrevRuns || hasNextRuns) && (
+            <div className="flex items-center gap-2 text-[13px]">
+              <span className="text-muted">Página {runsPage}</span>
+              {hasPrevRuns ? (
+                <Link href={`/agente?ep=${runsPage - 1}`} className="btn-dark !py-1 !px-2.5 text-[12px]" scroll={false}>
+                  ← Anteriores
+                </Link>
+              ) : (
+                <span className="btn-dark !py-1 !px-2.5 text-[12px] opacity-40 cursor-not-allowed">← Anteriores</span>
+              )}
+              {hasNextRuns ? (
+                <Link href={`/agente?ep=${runsPage + 1}`} className="btn-dark !py-1 !px-2.5 text-[12px]" scroll={false}>
+                  Siguientes →
+                </Link>
+              ) : (
+                <span className="btn-dark !py-1 !px-2.5 text-[12px] opacity-40 cursor-not-allowed">Siguientes →</span>
+              )}
+            </div>
+          )}
+        </div>
+        {runs.length === 0 ? (
           <div className="text-muted text-sm">
-            Sin ejecuciones todavía. Cuando lleguen mensajes a un chat monitorizado, el agente los
-            agrupará y aparecerá aquí el resultado.
+            {runsPage === 1
+              ? "Sin ejecuciones todavía. Cuando lleguen mensajes a un chat monitorizado, el agente los agrupará y aparecerá aquí el resultado."
+              : "No hay más ejecuciones en esta página."}
           </div>
         ) : (
           <div className="space-y-2">
-            {overview.lastRuns.map((run) => (
+            {runs.map((run) => (
               <div key={run.id} className="border border-border-dark rounded p-3">
                 <div className="flex items-center gap-2 flex-wrap text-[13px]">
                   <Badge
