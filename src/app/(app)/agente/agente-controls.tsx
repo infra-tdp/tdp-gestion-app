@@ -1,8 +1,9 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import {
   processChatNow,
+  saveAgentContext,
   saveAgentSettings,
   saveChatNotes,
   savePerson,
@@ -218,14 +219,19 @@ export function PersonRow({
 }
 
 export function AgentSettingsForm({ settings }: { settings: AgentSettings }) {
-  const formRef = useRef<HTMLFormElement>(null);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
+  // Controlados: React 19 resetea los <form action> al terminar; con estado el
+  // valor guardado permanece visible (mismo criterio que el mapeo de personas).
+  const [mode, setMode] = useState(settings.mode);
+  const [debounceSeconds, setDebounceSeconds] = useState(String(settings.debounceSeconds));
+  const [maxBatchWaitSeconds, setMaxBatchWaitSeconds] = useState(String(settings.maxBatchWaitSeconds));
+  const [repliesEnabled, setRepliesEnabled] = useState(settings.repliesEnabled);
+
   return (
     <form
-      ref={formRef}
       className="flex items-end gap-3 flex-wrap"
       action={(fd) =>
         startTransition(async () => {
@@ -239,7 +245,12 @@ export function AgentSettingsForm({ settings }: { settings: AgentSettings }) {
         <label className="block text-[12px] font-semibold uppercase tracking-wider text-muted mb-1.5">
           Modo
         </label>
-        <select name="mode" className="tdp-input" defaultValue={settings.mode}>
+        <select
+          name="mode"
+          className="tdp-input"
+          value={mode}
+          onChange={(e) => setMode(e.target.value as AgentSettings["mode"])}
+        >
           <option value="shadow">Shadow (solo registra)</option>
           <option value="active">Activo (ejecuta)</option>
         </select>
@@ -253,7 +264,8 @@ export function AgentSettingsForm({ settings }: { settings: AgentSettings }) {
           type="number"
           min={10}
           max={1800}
-          defaultValue={settings.debounceSeconds}
+          value={debounceSeconds}
+          onChange={(e) => setDebounceSeconds(e.target.value)}
           className="tdp-input"
           title="Segundos sin mensajes nuevos antes de procesar el lote"
         />
@@ -267,30 +279,79 @@ export function AgentSettingsForm({ settings }: { settings: AgentSettings }) {
           type="number"
           min={60}
           max={3600}
-          defaultValue={settings.maxBatchWaitSeconds}
+          value={maxBatchWaitSeconds}
+          onChange={(e) => setMaxBatchWaitSeconds(e.target.value)}
           className="tdp-input"
           title="Tope desde el primer mensaje pendiente aunque sigan llegando"
         />
       </div>
       <label className="flex items-center gap-2 pb-2.5 text-[13px] font-semibold cursor-pointer">
-        <input type="checkbox" name="repliesEnabled" defaultChecked={settings.repliesEnabled} />
+        <input
+          type="checkbox"
+          name="repliesEnabled"
+          checked={repliesEnabled}
+          onChange={(e) => setRepliesEnabled(e.target.checked)}
+        />
         Respuestas por WhatsApp
       </label>
-      <div className="w-full">
-        <label className="block text-[12px] font-semibold uppercase tracking-wider text-muted mb-1.5">
-          Instrucciones extra del negocio
-        </label>
-        <textarea
-          name="extraInstructions"
-          className="tdp-input min-h-20"
-          defaultValue={settings.extraInstructions}
-          placeholder="P. ej.: las urgencias de tienda siempre en prioridad High; los tickets de recambios llevan la etiqueta 'recambios'…"
-        />
-      </div>
       <button type="submit" className="btn-primary" disabled={pending}>
         {pending ? "Guardando…" : saved ? "Guardado ✓" : "Guardar ajustes"}
       </button>
       {error && <span className="text-danger text-sm font-semibold w-full">{error}</span>}
+    </form>
+  );
+}
+
+/**
+ * Contexto y reglas del agente: texto libre que se inyecta en el prompt en CADA
+ * ejecución. Editarlo aquí cambia el comportamiento del agente al instante, sin
+ * redeploy. Campo controlado + guardado propio (no pisa los demás ajustes).
+ */
+export function AgentContextForm({ settings }: { settings: AgentSettings }) {
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [text, setText] = useState(settings.extraInstructions ?? "");
+  const dirty = text !== (settings.extraInstructions ?? "");
+
+  return (
+    <form
+      action={(fd) =>
+        startTransition(async () => {
+          const res = await saveAgentContext(fd);
+          setError(res.error ?? null);
+          setSaved(!res.error);
+        })
+      }
+    >
+      <p className="text-muted text-[13px] mb-3">
+        Reglas y contexto del negocio para el agente. Se aplican en la próxima ejecución,{" "}
+        <span className="text-text font-semibold">sin necesidad de redeploy</span>. Escribe las
+        instrucciones en lenguaje natural, una por línea.
+      </p>
+      <textarea
+        name="extraInstructions"
+        className="tdp-input min-h-40 font-mono text-[13px] leading-relaxed"
+        value={text}
+        onChange={(e) => {
+          setText(e.target.value);
+          setSaved(false);
+        }}
+        placeholder={
+          "P. ej.:\n" +
+          "- Las urgencias de tienda van siempre en prioridad Urgent.\n" +
+          "- Los tickets de recambios llevan la etiqueta 'recambios'.\n" +
+          "- Si Raúl dice 'para hoy', ponlo en prioridad High.\n" +
+          "- No abras tickets de temas de marketing; esos los lleva otro equipo."
+        }
+      />
+      <div className="flex items-center gap-3 mt-3">
+        <button type="submit" className="btn-primary" disabled={pending || !dirty}>
+          {pending ? "Guardando…" : saved ? "Guardado ✓" : "Guardar contexto"}
+        </button>
+        {dirty && !pending && <span className="text-warning text-[12px] font-semibold">Cambios sin guardar</span>}
+        {error && <span className="text-danger text-sm font-semibold">{error}</span>}
+      </div>
     </form>
   );
 }

@@ -12,6 +12,7 @@ import {
 } from "@/lib/agente/client";
 import { Badge, Card, EmptyState, Kpi, PageHeader, formatDate, timeAgo } from "@/components/ui";
 import {
+  AgentContextForm,
   AgentSettingsForm,
   ChatRowControls,
   PersonRow,
@@ -129,6 +130,13 @@ export default async function AgentePage({
         <Card className="mb-4">
           <h2 className="headline text-2xl mb-3">Ajustes del agente</h2>
           <AgentSettingsForm settings={overview.settings} />
+        </Card>
+      )}
+
+      {canManage && (
+        <Card className="mb-4">
+          <h2 className="headline text-2xl mb-3">Contexto y reglas del agente</h2>
+          <AgentContextForm settings={overview.settings} />
         </Card>
       )}
 
