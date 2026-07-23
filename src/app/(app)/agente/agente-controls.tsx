@@ -113,6 +113,13 @@ export function PersonRow({
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
+  // Campos CONTROLADOS: React 19 resetea los <form action> al terminar, lo que
+  // revertía el <select> no controlado a "sin asignar" tras guardar (aunque en BD
+  // sí se guardaba). Con estado propio, el valor guardado permanece visible.
+  const [displayName, setDisplayName] = useState(person.displayName ?? "");
+  const [taskAccountId, setTaskAccountId] = useState(person.taskAccountId ?? "");
+  const [aliases, setAliases] = useState(person.aliases ?? "");
+
   const mapped = users.find((u) => u.accountId === person.taskAccountId);
 
   if (!canManage) {
@@ -152,7 +159,8 @@ export function PersonRow({
         <input
           name="displayName"
           className="tdp-input"
-          defaultValue={person.displayName ?? ""}
+          value={displayName}
+          onChange={(e) => setDisplayName(e.target.value)}
           placeholder={person.pushName || "Nombre"}
         />
       </div>
@@ -161,8 +169,18 @@ export function PersonRow({
           Usuario del gestor
         </label>
         {users.length > 0 ? (
-          <select name="taskAccountId" className="tdp-input" defaultValue={person.taskAccountId ?? ""}>
+          <select
+            name="taskAccountId"
+            className="tdp-input"
+            value={taskAccountId}
+            onChange={(e) => setTaskAccountId(e.target.value)}
+          >
             <option value="">— sin asignar —</option>
+            {/* Si el valor mapeado no está en la lista de usuarios, lo añadimos
+                para que el select lo muestre igualmente (no revertir a "sin asignar"). */}
+            {taskAccountId && !mapped && !users.some((u) => u.accountId === taskAccountId) && (
+              <option value={taskAccountId}>{taskAccountId}</option>
+            )}
             {users.map((u) => (
               <option key={u.accountId} value={u.accountId}>
                 {u.displayName}
@@ -173,7 +191,8 @@ export function PersonRow({
           <input
             name="taskAccountId"
             className="tdp-input"
-            defaultValue={person.taskAccountId ?? ""}
+            value={taskAccountId}
+            onChange={(e) => setTaskAccountId(e.target.value)}
             placeholder="id / email del usuario"
           />
         )}
@@ -185,7 +204,8 @@ export function PersonRow({
         <input
           name="aliases"
           className="tdp-input"
-          defaultValue={person.aliases ?? ""}
+          value={aliases}
+          onChange={(e) => setAliases(e.target.value)}
           placeholder="Rulo, el jefe…"
         />
       </div>
