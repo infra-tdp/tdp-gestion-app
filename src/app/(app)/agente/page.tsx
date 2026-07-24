@@ -129,14 +129,17 @@ export default async function AgentePage({
       {canManage && (
         <Card className="mb-4">
           <h2 className="headline text-2xl mb-3">Ajustes del agente</h2>
-          <AgentSettingsForm settings={overview.settings} />
+          {/* key: fuerza remount con datos frescos del servidor cada vez que
+              cambian los settings (los guarde este form u otro) — así nunca
+              queda desincronizado del estado real en BD. */}
+          <AgentSettingsForm key={JSON.stringify(overview.settings)} settings={overview.settings} />
         </Card>
       )}
 
       {canManage && (
         <Card className="mb-4">
           <h2 className="headline text-2xl mb-3">Contexto y reglas del agente</h2>
-          <AgentContextForm settings={overview.settings} />
+          <AgentContextForm key={JSON.stringify(overview.settings)} settings={overview.settings} />
         </Card>
       )}
 
@@ -190,7 +193,10 @@ export default async function AgentePage({
           <div className="space-y-2">
             {people.map((person) => (
               <PersonRow
-                key={person.id}
+                // Incluye los campos editables: remonta con datos frescos si
+                // cambiaron (guardado propio u otra fuente), en vez de quedarse
+                // con el estado local inicial para siempre.
+                key={`${person.id}:${person.displayName}:${person.taskAccountId}:${person.aliases}`}
                 person={person}
                 users={assignableUsers}
                 canManage={canManage}
