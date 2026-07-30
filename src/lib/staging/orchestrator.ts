@@ -18,6 +18,7 @@ import {
 } from "@/lib/infra/cloudflare";
 import { findServer, getServerPrivateIp, upcloudConfigured } from "@/lib/infra/upcloud";
 import { createBranch, deleteBranch } from "@/lib/infra/github";
+import { createNotification } from "@/lib/notify";
 
 /**
  * Orquestador de entornos staging efímeros de la web tallerdelpatinete.
@@ -369,7 +370,7 @@ async function provision(envId: number): Promise<void> {
 
     await setStatus(envId, "active", { url: `https://${fqdn}` });
 
-    await db.insert(schema.notifications).values({
+    await createNotification({
       userId: env.requestedBy,
       type: "staging.ready",
       title: `🟢 Staging ${env.slug} desplegándose`,
@@ -471,7 +472,7 @@ export async function expireStagingEnvs(): Promise<void> {
   for (const env of expired) {
     try {
       await destroyStagingEnv(env.id);
-      await db.insert(schema.notifications).values({
+      await createNotification({
         type: "staging.expired",
         title: `⏳ Staging ${env.slug} caducado y destruido`,
         meta: { envId: env.id },

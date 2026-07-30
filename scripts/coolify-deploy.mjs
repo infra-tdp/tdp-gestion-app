@@ -23,6 +23,8 @@ const APP_ENVS = [
   { key: "DATABASE_URL" },
   { key: "DATABASE_CA_CERT" },
   { key: "AUTH_SECRET" },
+  { key: "GOOGLE_CLIENT_ID" },
+  { key: "GOOGLE_CLIENT_SECRET" },
   { key: "ADMIN_EMAIL" },
   { key: "ADMIN_PASSWORD" },
   { key: "UPCLOUD_USERNAME" },

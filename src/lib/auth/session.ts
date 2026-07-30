@@ -28,7 +28,13 @@ function secret(): Uint8Array {
   return new TextEncoder().encode(s);
 }
 
-export async function createSession(user: SessionUser): Promise<void> {
+/**
+ * Crea la sesión. Por defecto dura SESSION_HOURS; un dispositivo de confianza
+ * («recordar sesión», máx. 7 días) pasa un maxAgeSeconds mayor acotado a su
+ * propia caducidad.
+ */
+export async function createSession(user: SessionUser, maxAgeSeconds?: number): Promise<void> {
+  const maxAge = Math.max(60, Math.floor(maxAgeSeconds ?? SESSION_HOURS * 3600));
   const token = await new SignJWT({
     sub: String(user.id),
     email: user.email,
@@ -37,7 +43,7 @@ export async function createSession(user: SessionUser): Promise<void> {
   })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime(`${SESSION_HOURS}h`)
+    .setExpirationTime(`${maxAge}s`)
     .sign(secret());
 
   (await cookies()).set(COOKIE_NAME, token, {
@@ -45,7 +51,7 @@ export async function createSession(user: SessionUser): Promise<void> {
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
-    maxAge: SESSION_HOURS * 3600,
+    maxAge,
   });
 }
 
