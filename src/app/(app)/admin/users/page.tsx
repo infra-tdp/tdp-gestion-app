@@ -1,15 +1,20 @@
+import Link from "next/link";
 import { asc } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
-import { requirePermission } from "@/lib/auth/rbac";
+import { getRoles, requirePermission } from "@/lib/auth/rbac";
 import { Badge, Card, PageHeader, formatDate } from "@/components/ui";
-import { UserForm, UserRowActions } from "./user-controls";
+import { UserForm, UserRowActions, type RoleOption } from "./user-controls";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Usuarios" };
 
 export default async function UsersPage() {
   const me = await requirePermission("users.manage");
-  const users = await db.select().from(schema.users).orderBy(asc(schema.users.id));
+  const [users, allRoles] = await Promise.all([
+    db.select().from(schema.users).orderBy(asc(schema.users.id)),
+    getRoles(),
+  ]);
+  const roleOptions: RoleOption[] = allRoles.map((r) => ({ key: r.key, name: r.name }));
 
   return (
     <>
@@ -17,10 +22,19 @@ export default async function UsersPage() {
 
       <Card className="mb-4">
         <h2 className="headline text-2xl mb-3">Crear usuario</h2>
-        <UserForm />
+        <UserForm roles={roleOptions} />
         <p className="text-muted text-[12px] mt-3">
-          Roles: <b>ADMIN</b> central (todo) · <b>INFRA</b> operaciones (nodos, tofu, merges) · <b>DEV</b> staging y PRs ·{" "}
-          <b>STORE</b> tienda (solo sus datos, fases CRM) · <b>VIEWER</b> solo lectura.
+          Roles disponibles: {allRoles.map((r, i) => (
+            <span key={r.key}>
+              {i > 0 && " · "}
+              <b>{r.key}</b> {r.name.toLowerCase()}
+            </span>
+          ))}
+          . Se crean y configuran en{" "}
+          <Link href="/admin/roles" className="text-primary underline">
+            Roles y permisos
+          </Link>
+          .
         </p>
       </Card>
 
@@ -48,7 +62,11 @@ export default async function UsersPage() {
                 <td>{u.active ? <Badge tone="success">Activo</Badge> : <Badge tone="danger">Desactivado</Badge>}</td>
                 <td className="text-muted">{formatDate(u.createdAt)}</td>
                 <td className="text-right">
-                  {u.id !== me.id ? <UserRowActions userId={u.id} role={u.role} active={u.active} /> : <span className="text-muted text-[12px]">tú</span>}
+                  {u.id !== me.id ? (
+                    <UserRowActions userId={u.id} role={u.role} active={u.active} roles={roleOptions} />
+                  ) : (
+                    <span className="text-muted text-[12px]">tú</span>
+                  )}
                 </td>
               </tr>
             ))}

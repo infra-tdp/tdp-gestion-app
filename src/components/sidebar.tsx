@@ -11,6 +11,7 @@ import {
   GitPullRequest,
   KeyRound,
   LayoutDashboard,
+  ListTree,
   Lock,
   MessageCircle,
   Network,
@@ -37,12 +38,15 @@ export const ICONS = {
   whatsapp: MessageCircle,
   infra: Network,
   security: Lock,
+  menu: ListTree,
 };
 
 export type IconKey = keyof typeof ICONS;
 
 /** Hoja de navegación (enlace a una página). */
 export type NavLeaf = {
+  /** Id estable del nodo (clave de la personalización del menú). */
+  id: string;
   href: string;
   label: string;
   icon?: IconKey;
@@ -52,7 +56,7 @@ export type NavLeaf = {
   badge?: "notifications";
 };
 /** Grupo plegable con hijos (hojas u otros grupos). Árbol de profundidad libre. */
-export type NavGroup = { label: string; icon?: IconKey; children: NavNode[] };
+export type NavGroup = { id: string; label: string; icon?: IconKey; children: NavNode[] };
 export type NavNode = NavLeaf | NavGroup;
 
 const isGroup = (n: NavNode): n is NavGroup => "children" in n;
@@ -81,28 +85,16 @@ export function Sidebar({
   logout: () => Promise<void>;
 }) {
   const pathname = usePathname();
-  // Estado de plegado por id de grupo. undefined = usar el default (abierto si
-  // contiene la ruta activa). Persiste entre navegaciones (el layout no se
-  // desmonta) y entre recargas (localStorage).
+  // Estado de plegado por id de grupo. undefined = usar el default: ABIERTO
+  // solo si contiene la ruta activa. El acordeón SIEMPRE arranca plegado y en
+  // cada navegación se vuelve al default, de modo que solo queda expandida la
+  // cadena de la página actual (el grupo activo y sus padres).
   const [openState, setOpenState] = useState<Record<string, boolean>>({});
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem("tdp-nav-open");
-      if (raw) setOpenState(JSON.parse(raw));
-    } catch {
-      /* ignore */
-    }
-  }, []);
+    setOpenState({});
+  }, [pathname]);
   const toggle = (id: string, defOpen: boolean) =>
-    setOpenState((prev) => {
-      const next = { ...prev, [id]: !(prev[id] ?? defOpen) };
-      try {
-        localStorage.setItem("tdp-nav-open", JSON.stringify(next));
-      } catch {
-        /* ignore */
-      }
-      return next;
-    });
+    setOpenState((prev) => ({ ...prev, [id]: !(prev[id] ?? defOpen) }));
 
   return (
     <aside className="w-60 shrink-0 h-screen sticky top-0 flex flex-col bg-bg border-r border-border-dark">
@@ -114,10 +106,9 @@ export function Sidebar({
       <nav className="flex-1 overflow-y-auto py-3">
         {items.map((node) => (
           <NavRow
-            key={isGroup(node) ? "g:" + node.label : node.href}
+            key={node.id}
             node={node}
             depth={0}
-            path={isGroup(node) ? node.label : node.href}
             pathname={pathname}
             openState={openState}
             toggle={toggle}
@@ -141,7 +132,6 @@ export function Sidebar({
 function NavRow({
   node,
   depth,
-  path,
   pathname,
   openState,
   toggle,
@@ -149,7 +139,6 @@ function NavRow({
 }: {
   node: NavNode;
   depth: number;
-  path: string;
   pathname: string;
   openState: Record<string, boolean>;
   toggle: (id: string, defOpen: boolean) => void;
@@ -161,12 +150,12 @@ function NavRow({
 
   if (isGroup(node)) {
     const active = containsActive(node, pathname);
-    const open = openState[path] ?? active; // abierto por defecto si contiene la activa
+    const open = openState[node.id] ?? active; // solo la cadena activa arranca abierta
     return (
       <div>
         <button
           type="button"
-          onClick={() => toggle(path, active)}
+          onClick={() => toggle(node.id, active)}
           aria-expanded={open}
           style={{ paddingLeft: pad }}
           className={`w-full flex items-center gap-2.5 pr-4 py-2.5 text-[14px] font-semibold transition-colors cursor-pointer border-l-2 ${
@@ -186,10 +175,9 @@ function NavRow({
           <div>
             {node.children.map((child) => (
               <NavRow
-                key={isGroup(child) ? "g:" + child.label : child.href}
+                key={child.id}
                 node={child}
                 depth={depth + 1}
-                path={path + "/" + (isGroup(child) ? child.label : child.href)}
                 pathname={pathname}
                 openState={openState}
                 toggle={toggle}

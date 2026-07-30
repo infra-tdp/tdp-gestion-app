@@ -4,10 +4,13 @@ import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
-import { assertPermission, requireUser } from "@/lib/auth/rbac";
+import { assertPermission, getRoles, requireUser } from "@/lib/auth/rbac";
 import type { Role } from "@/lib/auth/session";
 
-const ROLES: Role[] = ["ADMIN", "INFRA", "DEV", "STORE", "VIEWER"];
+/** Los roles son dinámicos: se validan contra la tabla `roles`. */
+async function roleExists(key: string): Promise<boolean> {
+  return (await getRoles()).some((r) => r.key === key);
+}
 
 export async function createUser(formData: FormData): Promise<{ error?: string }> {
   await assertPermission("users.manage");
@@ -17,7 +20,7 @@ export async function createUser(formData: FormData): Promise<{ error?: string }
   const role = String(formData.get("role") ?? "VIEWER") as Role;
   if (!email.includes("@") || !name) return { error: "Email y nombre obligatorios" };
   if (password.length < 10) return { error: "La contraseña debe tener al menos 10 caracteres" };
-  if (!ROLES.includes(role)) return { error: "Rol inválido" };
+  if (!(await roleExists(role))) return { error: "Rol inválido" };
   try {
     await db.insert(schema.users).values({
       email,
@@ -35,7 +38,7 @@ export async function createUser(formData: FormData): Promise<{ error?: string }
 export async function setUserRole(userId: number, role: Role): Promise<{ error?: string }> {
   const admin = await assertPermission("users.manage");
   if (admin.id === userId) return { error: "No puedes cambiar tu propio rol" };
-  if (!ROLES.includes(role)) return { error: "Rol inválido" };
+  if (!(await roleExists(role))) return { error: "Rol inválido" };
   await db.update(schema.users).set({ role }).where(eq(schema.users.id, userId));
   revalidatePath("/admin/users");
   return {};

@@ -29,6 +29,13 @@
       "when": 1784128994140,
       "tag": "0003_staging_server_project",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1785402025379,
+      "tag": "0004_dynamic_rbac",
+      "breakpoints": true
     }
   ]
 }

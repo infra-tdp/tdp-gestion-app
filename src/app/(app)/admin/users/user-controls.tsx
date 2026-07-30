@@ -3,9 +3,10 @@
 import { useRef, useState, useTransition } from "react";
 import { createUser, resetUserPassword, setUserActive, setUserRole } from "@/lib/actions/users";
 
-const ROLES = ["ADMIN", "INFRA", "DEV", "STORE", "VIEWER"] as const;
+/** Roles dinámicos (tabla `roles`): los pasa el servidor desde la página. */
+export type RoleOption = { key: string; name: string };
 
-export function UserForm() {
+export function UserForm({ roles }: { roles: RoleOption[] }) {
   const formRef = useRef<HTMLFormElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -40,8 +41,10 @@ export function UserForm() {
       <div className="w-32">
         <label className="block text-[12px] font-semibold uppercase tracking-wider text-muted mb-1.5">Rol</label>
         <select name="role" className="tdp-input" defaultValue="DEV">
-          {ROLES.map((r) => (
-            <option key={r}>{r}</option>
+          {roles.map((r) => (
+            <option key={r.key} value={r.key} title={r.name}>
+              {r.key}
+            </option>
           ))}
         </select>
       </div>
@@ -53,7 +56,17 @@ export function UserForm() {
   );
 }
 
-export function UserRowActions({ userId, role, active }: { userId: number; role: string; active: boolean }) {
+export function UserRowActions({
+  userId,
+  role,
+  active,
+  roles,
+}: {
+  userId: number;
+  role: string;
+  active: boolean;
+  roles: RoleOption[];
+}) {
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -70,10 +83,12 @@ export function UserRowActions({ userId, role, active }: { userId: number; role:
           className="tdp-input !w-28 !py-1 text-[12px]"
           value={role}
           disabled={pending}
-          onChange={(e) => act(() => setUserRole(userId, e.target.value as (typeof ROLES)[number]))}
+          onChange={(e) => act(() => setUserRole(userId, e.target.value))}
         >
-          {ROLES.map((r) => (
-            <option key={r}>{r}</option>
+          {roles.map((r) => (
+            <option key={r.key} value={r.key} title={r.name}>
+              {r.key}
+            </option>
           ))}
         </select>
         <button

@@ -8,7 +8,12 @@ import { db, schema } from "@/lib/db";
 const COOKIE_NAME = "tdp_session";
 const SESSION_HOURS = 12;
 
-export type Role = "ADMIN" | "INFRA" | "DEV" | "STORE" | "VIEWER";
+/**
+ * Los roles son DINÁMICOS (tabla `roles`, gestionados en /admin/roles), así que
+ * el tipo es string: la clave del rol (p.ej. "ADMIN", "INFRA" o uno creado).
+ * "ADMIN" es el único con semántica fija en código (siempre todos los permisos).
+ */
+export type Role = string;
 
 export type SessionUser = {
   id: number;
