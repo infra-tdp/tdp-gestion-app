@@ -1,7 +1,7 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
-import { Lock, Pencil, Trash2 } from "lucide-react";
+import { useMemo, useRef, useState, useTransition } from "react";
+import { Lock, Pencil, Search, Trash2, X } from "lucide-react";
 import {
   createRoleAction,
   deleteRoleAction,
@@ -206,6 +206,13 @@ function CreateRoleForm({ roles, onError }: { roles: RoleView[]; onError: (e: st
 type Row = { permission: Permission; label: string; locked: boolean; roles: string[] };
 type ModuleGroup = { module: string; rows: Row[] };
 
+/** Para buscar sin distinguir mayúsculas ni acentos ("gestion" ≈ "Gestión"). */
+const norm = (s: string) =>
+  s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+
 export function RoleMatrix({ roles, modules }: { roles: RoleView[]; modules: ModuleGroup[] }) {
   // Estado local: permission -> Set<roleKey> (optimista).
   const [state, setState] = useState<Record<string, Set<string>>>(() => {
@@ -215,6 +222,23 @@ export function RoleMatrix({ roles, modules }: { roles: RoleView[]; modules: Mod
   });
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+
+  // Buscador: si coincide el nombre del módulo se muestra entero; si no, solo
+  // las acciones cuyo nombre o clave de permiso contengan el texto.
+  const [query, setQuery] = useState("");
+  const filtered = useMemo(() => {
+    const q = norm(query.trim());
+    if (!q) return modules;
+    return modules
+      .map((m) =>
+        norm(m.module).includes(q)
+          ? m
+          : { ...m, rows: m.rows.filter((r) => norm(r.label).includes(q) || norm(r.permission).includes(q)) },
+      )
+      .filter((m) => m.rows.length > 0);
+  }, [modules, query]);
+  const totalRows = modules.reduce((n, m) => n + m.rows.length, 0);
+  const shownRows = filtered.reduce((n, m) => n + m.rows.length, 0);
 
   const toggle = (permission: Permission, roleKey: string, checked: boolean) => {
     setError(null);
@@ -241,6 +265,31 @@ export function RoleMatrix({ roles, modules }: { roles: RoleView[]; modules: Mod
 
   return (
     <div className="tdp-card-plain p-0 overflow-x-auto">
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-border-dark flex-wrap">
+        <div className="relative flex-1 min-w-56 max-w-md">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
+          <input
+            className="tdp-input !pl-8 !pr-8 !py-1.5 text-[13px]"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Filtrar por módulo, acción o permiso… (p.ej. staging)"
+            aria-label="Filtrar la matriz de permisos"
+          />
+          {query && (
+            <button
+              type="button"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted hover:text-text cursor-pointer"
+              onClick={() => setQuery("")}
+              title="Limpiar filtro"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+        <span className="text-muted text-[12px]">
+          {query ? `${shownRows} de ${totalRows} acciones` : `${totalRows} acciones`}
+        </span>
+      </div>
       {error && <div className="text-danger text-sm font-semibold px-4 pt-3">{error}</div>}
       <table className="w-full text-sm border-collapse">
         <thead>
@@ -261,9 +310,17 @@ export function RoleMatrix({ roles, modules }: { roles: RoleView[]; modules: Mod
           </tr>
         </thead>
         <tbody>
-          {modules.map((m) => (
+          {filtered.map((m) => (
             <ModuleRows key={m.module} group={m} roles={roles} state={state} toggle={toggle} pending={pending} />
           ))}
+          {filtered.length === 0 && (
+            <tr>
+              <td colSpan={roles.length + 1} className="p-6 text-center text-muted">
+                Sin resultados para «{query}» — prueba con el nombre del módulo (Staging, OpenTofu…) o la clave
+                del permiso.
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
     </div>
