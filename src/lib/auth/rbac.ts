@@ -1,4 +1,5 @@
 import "server-only";
+import { cache as reactCache } from "react";
 import { redirect } from "next/navigation";
 import { and, asc, count, eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
@@ -14,8 +15,8 @@ import { getSessionUser, type Role, type SessionUser } from "./session";
  *   · ADMIN (rol de sistema, solo lectura) SIEMPRE tiene TODOS los permisos,
  *     incluidos los que se añadan en el futuro (anti-lockout).
  *   · Los permisos de LOCKED_PERMISSIONS quedan fijos en ADMIN (sin escalada).
- * La matriz efectiva se cachea en memoria (una réplica) y se recarga en cada
- * cambio y al arrancar.
+ * Roles y matriz se leen FRESCOS de BD en cada request (memoizado por request
+ * con React cache) — sin caché de proceso: ver nota sobre `current` más abajo.
  */
 const DEFAULT_PERMISSIONS = {
   "infra.view": ["ADMIN", "INFRA", "DEV", "VIEWER"],
@@ -102,8 +103,15 @@ type RbacCache = {
   matrix: Record<string, Set<string>>;
 };
 
-let cache: RbacCache | null = null;
-let loadPromise: Promise<void> | null = null;
+/**
+ * Snapshot de la ÚLTIMA carga, para las lecturas síncronas (hasPermission) del
+ * mismo render. ¡NO es una caché entre requests!: cada request recarga desde BD
+ * (ver ensureRbacLoaded). Una caché de vida larga aquí no funciona: Next
+ * empaqueta una copia de este módulo por ruta, así que una mutación hecha desde
+ * una server action no invalidaría la copia de las demás rutas (los roles
+ * nuevos "no aparecían"), y con varias réplicas pasaría lo mismo entre procesos.
+ */
+let current: RbacCache | null = null;
 
 function defaultMatrix(): Record<string, Set<string>> {
   const m: Record<string, Set<string>> = {};
@@ -150,8 +158,8 @@ async function seedRolePermissions(roleKeys: Set<string>): Promise<void> {
   }
 }
 
-/** Recarga roles + matriz desde BD (sembrando la primera vez). */
-export async function reloadRbac(): Promise<void> {
+/** Lee roles + matriz desde BD (sembrando la primera vez). null si BD no lista. */
+async function fetchRbac(): Promise<RbacCache | null> {
   try {
     const roleRows = await db
       .select()
@@ -173,7 +181,7 @@ export async function reloadRbac(): Promise<void> {
         matrix[r.permission].add(r.roleKey);
       }
     }
-    cache = {
+    return {
       roles: sortRoles(
         roleRows.map((r) => ({
           key: r.key,
@@ -185,24 +193,29 @@ export async function reloadRbac(): Promise<void> {
       matrix,
     };
   } catch {
-    /* BD aún no lista (migraciones): defaults fail-safe, sin cachear */
-    cache = null;
+    /* BD aún no lista (migraciones): defaults fail-safe */
+    return null;
   }
 }
 
-/** Garantiza roles+matriz cargados (memoizado). Lo esperan los gates. */
+/** Una única carga por request (React cache): TIEMPO REAL sin caché rancia. */
+const loadRbacForRequest = reactCache(async (): Promise<RbacCache | null> => {
+  current = await fetchRbac();
+  return current;
+});
+
+/** Carga roles+matriz frescos para este request. Lo esperan los gates. */
 export async function ensureRbacLoaded(): Promise<void> {
-  if (cache) return;
-  if (!loadPromise) {
-    loadPromise = reloadRbac().finally(() => {
-      loadPromise = null;
-    });
-  }
-  await loadPromise;
+  await loadRbacForRequest();
+}
+
+/** Refresca el snapshot tras una mutación (dentro del mismo request/action). */
+export async function reloadRbac(): Promise<void> {
+  current = await fetchRbac();
 }
 
 function currentMatrix(): Record<string, Set<string>> {
-  return cache?.matrix ?? defaultMatrix();
+  return current?.matrix ?? defaultMatrix();
 }
 
 export function hasPermission(role: Role, permission: Permission): boolean {
@@ -213,13 +226,13 @@ export function hasPermission(role: Role, permission: Permission): boolean {
 /** Lista de roles (ADMIN primero). Para selects de usuarios y la pantalla de roles. */
 export async function getRoles(): Promise<RoleInfo[]> {
   await ensureRbacLoaded();
-  return cache?.roles ?? SEED_ROLES;
+  return current?.roles ?? SEED_ROLES;
 }
 
 /** Matriz efectiva permiso → roles[] (incluye ADMIN) para pintar la pantalla. */
 export async function getEffectiveMatrix(): Promise<Record<Permission, string[]>> {
   await ensureRbacLoaded();
-  const roles = cache?.roles ?? SEED_ROLES;
+  const roles = current?.roles ?? SEED_ROLES;
   const m = currentMatrix();
   const out = {} as Record<Permission, string[]>;
   for (const p of ALL_PERMISSIONS) {
@@ -310,7 +323,7 @@ export async function setRolePermission(
   if (roleKey === "ADMIN") return { error: "ADMIN siempre tiene todos los permisos." };
   if (LOCKED_PERMISSIONS.includes(permission)) return { error: "Permiso bloqueado a ADMIN." };
   await ensureRbacLoaded();
-  if (!(cache?.roles ?? SEED_ROLES).some((r) => r.key === roleKey)) {
+  if (!(current?.roles ?? SEED_ROLES).some((r) => r.key === roleKey)) {
     return { error: "Rol desconocido" };
   }
 
