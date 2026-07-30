@@ -14,7 +14,7 @@ import { getSessionUser, type Role, type SessionUser } from "./session";
  * de seguridad, resueltas en código y no en BD:
  *   · ADMIN (rol de sistema, solo lectura) SIEMPRE tiene TODOS los permisos,
  *     incluidos los que se añadan en el futuro (anti-lockout).
- *   · Los permisos de LOCKED_PERMISSIONS quedan fijos en ADMIN (sin escalada).
+ *   · Los SENSITIVE_PERMISSIONS son asignables, pero con advertencia en la UI.
  * Roles y matriz se leen FRESCOS de BD en cada request (memoizado por request
  * con React cache) — sin caché de proceso: ver nota sobre `current` más abajo.
  */
@@ -45,8 +45,12 @@ export type Permission = keyof typeof DEFAULT_PERMISSIONS;
 
 export const ALL_PERMISSIONS = Object.keys(DEFAULT_PERMISSIONS) as Permission[];
 
-/** Bloqueados: solo ADMIN y NO editables en la UI (las "llaves del reino"). */
-export const LOCKED_PERMISSIONS: readonly Permission[] = [
+/**
+ * SENSIBLES (las "llaves del reino"): asignables a cualquier rol, pero la UI
+ * muestra una advertencia cuando se conceden a un rol distinto de ADMIN —
+ * quien los tenga puede gestionar usuarios/roles y escalar sus propios permisos.
+ */
+export const SENSITIVE_PERMISSIONS: readonly Permission[] = [
   "users.manage",
   "roles.manage",
   "nav.manage",
@@ -71,9 +75,9 @@ export const PERMISSION_META: Record<Permission, { module: string; label: string
   "ai.use": { module: "Asistente", label: "Usar el asistente IA" },
   "agente.view": { module: "Agente WhatsApp", label: "Ver el agente de tareas" },
   "agente.manage": { module: "Agente WhatsApp", label: "Configurar chats, personas y modo del agente" },
-  "users.manage": { module: "Administración", label: "Gestionar usuarios (bloqueado: ADMIN)" },
-  "roles.manage": { module: "Administración", label: "Configurar roles/permisos (bloqueado: ADMIN)" },
-  "nav.manage": { module: "Administración", label: "Organizar el menú de navegación (bloqueado: ADMIN)" },
+  "users.manage": { module: "Administración", label: "Gestionar usuarios" },
+  "roles.manage": { module: "Administración", label: "Configurar roles/permisos" },
+  "nav.manage": { module: "Administración", label: "Organizar el menú de navegación" },
 };
 
 /** Roles semilla de la migración (fallback si la BD aún no está lista). */
@@ -118,7 +122,6 @@ function defaultMatrix(): Record<string, Set<string>> {
   for (const [p, roles] of Object.entries(DEFAULT_PERMISSIONS)) {
     m[p] = new Set(roles.filter((r) => r !== "ADMIN"));
   }
-  for (const p of LOCKED_PERMISSIONS) m[p] = new Set();
   return m;
 }
 
@@ -144,7 +147,6 @@ async function seedRolePermissions(roleKeys: Set<string>): Promise<void> {
 
   const values: { roleKey: string; permission: string }[] = [];
   for (const p of ALL_PERMISSIONS) {
-    if (LOCKED_PERMISSIONS.includes(p)) continue;
     const granted = legacy?.[p] ?? DEFAULT_PERMISSIONS[p];
     for (const r of granted) {
       if (r !== "ADMIN" && roleKeys.has(r)) values.push({ roleKey: r, permission: p });
@@ -176,8 +178,8 @@ async function fetchRbac(): Promise<RbacCache | null> {
     const matrix: Record<string, Set<string>> = {};
     for (const p of ALL_PERMISSIONS) matrix[p] = new Set();
     for (const r of permRows) {
-      // Ignora filas de permisos retirados del catálogo y las llaves del reino
-      if (matrix[r.permission] && !LOCKED_PERMISSIONS.includes(r.permission as Permission)) {
+      // Ignora filas de permisos retirados del catálogo
+      if (matrix[r.permission]) {
         matrix[r.permission].add(r.roleKey);
       }
     }
@@ -321,7 +323,6 @@ export async function setRolePermission(
 ): Promise<{ error?: string }> {
   if (!ALL_PERMISSIONS.includes(permission)) return { error: "Permiso desconocido" };
   if (roleKey === "ADMIN") return { error: "ADMIN siempre tiene todos los permisos." };
-  if (LOCKED_PERMISSIONS.includes(permission)) return { error: "Permiso bloqueado a ADMIN." };
   await ensureRbacLoaded();
   if (!(current?.roles ?? SEED_ROLES).some((r) => r.key === roleKey)) {
     return { error: "Rol desconocido" };

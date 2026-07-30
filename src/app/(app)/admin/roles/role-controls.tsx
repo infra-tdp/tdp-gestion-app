@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState, useTransition } from "react";
-import { Lock, Pencil, Search, Trash2, X } from "lucide-react";
+import { AlertTriangle, Lock, Pencil, Search, Trash2, X } from "lucide-react";
 import {
   createRoleAction,
   deleteRoleAction,
@@ -203,7 +203,7 @@ function CreateRoleForm({ roles, onError }: { roles: RoleView[]; onError: (e: st
 
 /* ------------------------------ Matriz de permisos ------------------------ */
 
-type Row = { permission: Permission; label: string; locked: boolean; roles: string[] };
+type Row = { permission: Permission; label: string; sensitive: boolean; roles: string[] };
 type ModuleGroup = { module: string; rows: Row[] };
 
 /** Para buscar sin distinguir mayúsculas ni acentos ("gestion" ≈ "Gestión"). */
@@ -354,18 +354,32 @@ function ModuleRows({
             <code className="text-muted text-[11px]">{row.permission}</code>
           </td>
           {roles.map((role) => {
-            const fixed = role.key === "ADMIN" || row.locked; // ADMIN siempre; bloqueados no editables
+            const fixed = role.key === "ADMIN"; // ADMIN siempre tiene todo (solo lectura)
             const checked = role.key === "ADMIN" ? true : state[row.permission]?.has(role.key) ?? false;
+            const warn = row.sensitive && checked && role.key !== "ADMIN";
             return (
               <td key={role.key} className="text-center p-3">
-                <input
-                  type="checkbox"
-                  className="tdp-check"
-                  checked={checked}
-                  disabled={fixed || pending}
-                  title={fixed ? "Fijo (ADMIN / permiso bloqueado)" : undefined}
-                  onChange={(e) => toggle(row.permission, role.key, e.target.checked)}
-                />
+                <span className="inline-flex items-center gap-1">
+                  <input
+                    type="checkbox"
+                    className="tdp-check"
+                    checked={checked}
+                    disabled={fixed || pending}
+                    title={fixed ? "Fijo: ADMIN siempre tiene todos los permisos" : undefined}
+                    onChange={(e) => toggle(row.permission, role.key, e.target.checked)}
+                  />
+                  {warn && (
+                    <AlertTriangle
+                      size={14}
+                      className="text-warning shrink-0"
+                      aria-label="Permiso sensible concedido a un rol que no es ADMIN"
+                    >
+                      <title>
+                        Permiso sensible: este rol podrá gestionar usuarios/roles y ampliar sus propios permisos.
+                      </title>
+                    </AlertTriangle>
+                  )}
+                </span>
               </td>
             );
           })}
