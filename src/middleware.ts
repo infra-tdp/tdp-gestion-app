@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const SESSION_COOKIE = "tdp_session";
-const PUBLIC_PATHS = ["/login", "/api/health"];
+const PUBLIC_PATHS = ["/login", "/api/health", "/api/auth/google"];
 
 /**
  * Gate de sesión a nivel edge: sin cookie → /login. La verificación criptográfica

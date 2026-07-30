@@ -57,6 +57,7 @@ export const NAV: NavDef[] = [
         icon: "security",
         children: [
           { id: "security.ssh", href: "/settings/ssh-keys", label: "Claves SSH", icon: "keys" },
+          { id: "security.account", href: "/settings/seguridad", label: "Seguridad de cuenta", icon: "security" },
         ],
       },
     ],
@@ -78,6 +79,7 @@ export const NAV: NavDef[] = [
       { id: "admin.users", href: "/admin/users", label: "Usuarios", icon: "users", permission: "users.manage" },
       { id: "admin.roles", href: "/admin/roles", label: "Roles y permisos", icon: "roles", permission: "roles.manage" },
       { id: "admin.nav", href: "/admin/nav", label: "Menú de navegación", icon: "menu", permission: "nav.manage" },
+      { id: "admin.mail", href: "/admin/correo", label: "Correo de notificaciones", icon: "bell", permission: "mail.manage" },
     ],
   },
   { id: "notifications", href: "/notificaciones", label: "Notificaciones", icon: "bell", badge: "notifications" },

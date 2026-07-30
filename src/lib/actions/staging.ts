@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { assertPermission } from "@/lib/auth/rbac";
+import { createNotification } from "@/lib/notify";
 import { destroyStagingEnv, redeployStagingEnv, requestStagingEnv } from "@/lib/staging/orchestrator";
 import { createPullRequest, getPullRequest, mergePullRequest } from "@/lib/infra/github";
 
@@ -111,7 +112,7 @@ export async function openStagingPr(envId: number, title: string): Promise<{ err
       .update(schema.stagingEnvs)
       .set({ prNumber: pr.number, prUrl: pr.html_url, updatedAt: new Date() })
       .where(eq(schema.stagingEnvs.id, envId));
-    await db.insert(schema.notifications).values({
+    await createNotification({
       type: "pr.opened",
       title: `🔀 PR #${pr.number} abierta por ${user.name} (${env.branch})`,
       body: pr.html_url,
@@ -139,7 +140,7 @@ export async function mergeStagingPr(envId: number): Promise<{ error?: string }>
     if (pr.merged) return { error: "La PR ya está mergeada" };
     if (pr.state !== "open") return { error: `La PR está ${pr.state}` };
     await mergePullRequest(env.prNumber);
-    await db.insert(schema.notifications).values({
+    await createNotification({
       type: "pr.merged",
       title: `✅ PR #${env.prNumber} mergeada por ${user.name} — el CI publicará la nueva imagen de prod`,
       body: env.prUrl,

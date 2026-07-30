@@ -45,6 +45,9 @@ export const rolePermissions = pgTable(
   (t) => [primaryKey({ columns: [t.roleKey, t.permission] })],
 );
 
+/** Método de segundo factor: EMAIL (clave temporal al correo, por defecto) o TOTP (Google Authenticator). */
+export const twoFactorMethodEnum = pgEnum("two_factor_method", ["EMAIL", "TOTP"]);
+
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   email: varchar("email", { length: 255 }).notNull().unique(),
@@ -57,6 +60,52 @@ export const users = pgTable("users", {
   /** Para el rol STORE en fases CRM: id de la tienda a la que pertenece */
   storeId: integer("store_id"),
   active: boolean("active").notNull().default(true),
+  /** `sub` de Google del usuario que ha vinculado su cuenta (mismo email) para el acceso rápido. */
+  googleSub: varchar("google_sub", { length: 64 }).unique(),
+  /** 2FA siempre activo: EMAIL por defecto; el usuario puede pasarse a TOTP desde Seguridad. */
+  twoFactorMethod: twoFactorMethodEnum("two_factor_method").notNull().default("EMAIL"),
+  /** Secreto TOTP confirmado (base32). Solo cuando twoFactorMethod = TOTP. */
+  totpSecret: text("totp_secret"),
+  /** Secreto TOTP pendiente de confirmar con un primer código válido. */
+  totpPendingSecret: text("totp_pending_secret"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/* ------------------------- Autenticación en dos pasos ---------------------- */
+
+/**
+ * Desafío 2FA pendiente entre el login (contraseña OK) y la verificación del
+ * segundo factor. Para EMAIL guarda el hash del código; para TOTP solo marca el
+ * desafío (el código se valida contra el secreto del usuario). Filas efímeras.
+ */
+export const authChallenges = pgTable("auth_challenges", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  method: twoFactorMethodEnum("method").notNull(),
+  /** bcrypt del código de 6 dígitos enviado por email (null para TOTP) */
+  codeHash: text("code_hash"),
+  attempts: integer("attempts").notNull().default(0),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Dispositivos de confianza («recordar sesión»): la cookie del navegador guarda
+ * un token cuyo hash vive aquí. Mientras no caduque (máx. 7 días) ese mismo
+ * dispositivo entra sin repetir el 2FA y su sesión dura hasta la caducidad.
+ */
+export const trustedDevices = pgTable("trusted_devices", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  /** SHA-256 hex del token aleatorio de la cookie */
+  tokenHash: varchar("token_hash", { length: 64 }).notNull().unique(),
+  userAgent: text("user_agent"),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }).notNull().defaultNow(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

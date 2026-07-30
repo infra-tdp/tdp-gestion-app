@@ -38,6 +38,7 @@ const DEFAULT_PERMISSIONS = {
   "users.manage": ["ADMIN"],
   "roles.manage": ["ADMIN"],
   "nav.manage": ["ADMIN"],
+  "mail.manage": ["ADMIN"],
 } as const satisfies Record<string, readonly string[]>;
 
 export type Permission = keyof typeof DEFAULT_PERMISSIONS;
@@ -73,6 +74,7 @@ export const PERMISSION_META: Record<Permission, { module: string; label: string
   "users.manage": { module: "Administración", label: "Gestionar usuarios (bloqueado: ADMIN)" },
   "roles.manage": { module: "Administración", label: "Configurar roles/permisos (bloqueado: ADMIN)" },
   "nav.manage": { module: "Administración", label: "Organizar el menú de navegación (bloqueado: ADMIN)" },
+  "mail.manage": { module: "Administración", label: "Configurar el correo de notificaciones (SMTP)" },
 };
 
 /** Roles semilla de la migración (fallback si la BD aún no está lista). */

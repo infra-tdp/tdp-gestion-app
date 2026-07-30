@@ -1,6 +1,7 @@
 import "server-only";
 import { and, desc, eq, gte, lt, sql } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
+import { createNotification } from "@/lib/notify";
 
 /**
  * Motor de disponibilidad: comprueba por HTTP las aplicaciones desplegadas
@@ -49,7 +50,7 @@ export async function checkMonitor(monitor: typeof schema.monitors.$inferSelect)
       .offset(1)
       .limit(1);
     if (!prev || prev.ok) {
-      await db.insert(schema.notifications).values({
+      await createNotification({
         type: "monitor.down",
         title: `🔴 ${monitor.name} no responde`,
         body: `${monitor.url} — ${error ?? "sin detalle"}`,

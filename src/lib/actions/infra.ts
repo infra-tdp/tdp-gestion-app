@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { assertPermission } from "@/lib/auth/rbac";
+import { createNotification } from "@/lib/notify";
 import { restartServer, startServer, stopServer } from "@/lib/infra/upcloud";
 import { startTofuRun } from "@/lib/infra/tofu";
 import { checkMonitor } from "@/lib/infra/monitors";
@@ -16,7 +17,7 @@ export async function nodeAction(uuid: string, action: "start" | "stop" | "resta
     if (action === "start") await startServer(uuid);
     else if (action === "stop") await stopServer(uuid);
     else await restartServer(uuid);
-    await db.insert(schema.notifications).values({
+    await createNotification({
       type: "node.action",
       title: `⚙️ ${user.name} ejecutó ${action} sobre el nodo ${uuid.slice(0, 8)}…`,
     });
