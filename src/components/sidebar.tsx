@@ -18,6 +18,7 @@ import {
   Radio,
   Server,
   ShieldCheck,
+  UserRound,
   Users,
   Workflow,
 } from "lucide-react";
@@ -39,6 +40,7 @@ export const ICONS = {
   infra: Network,
   security: Lock,
   menu: ListTree,
+  user: UserRound,
 };
 
 export type IconKey = keyof typeof ICONS;
@@ -123,7 +125,7 @@ export function Sidebar({
         </Link>
         <div className="flex items-center gap-3 mt-2">
           <Link href="/settings/seguridad" className="text-muted text-[12px] hover:text-primary">
-            Mi cuenta
+            Mi perfil
           </Link>
           <form action={logout}>
             <button className="text-muted text-[12px] hover:text-danger cursor-pointer" type="submit">

@@ -57,7 +57,6 @@ export const NAV: NavDef[] = [
         icon: "security",
         children: [
           { id: "security.ssh", href: "/settings/ssh-keys", label: "Claves SSH", icon: "keys" },
-          { id: "security.account", href: "/settings/seguridad", label: "Seguridad de cuenta", icon: "security" },
         ],
       },
     ],
@@ -83,6 +82,7 @@ export const NAV: NavDef[] = [
     ],
   },
   { id: "notifications", href: "/notificaciones", label: "Notificaciones", icon: "bell", badge: "notifications" },
+  { id: "profile", href: "/settings/seguridad", label: "Mi perfil", icon: "user" },
 ];
 
 /* ------------------------- Personalización (overrides) -------------------- */
