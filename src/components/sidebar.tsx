@@ -117,13 +117,20 @@ export function Sidebar({
         ))}
       </nav>
       <div className="px-5 py-4 border-t border-border-dark">
-        <div className="text-[13px] font-semibold">{userName}</div>
-        <div className="text-muted text-[11px] uppercase tracking-wider">{userRole}</div>
-        <form action={logout}>
-          <button className="text-muted text-[12px] mt-2 hover:text-danger cursor-pointer" type="submit">
-            Cerrar sesión
-          </button>
-        </form>
+        <Link href="/settings/seguridad" className="block group" title="Seguridad de tu cuenta">
+          <div className="text-[13px] font-semibold group-hover:text-primary transition-colors">{userName}</div>
+          <div className="text-muted text-[11px] uppercase tracking-wider">{userRole}</div>
+        </Link>
+        <div className="flex items-center gap-3 mt-2">
+          <Link href="/settings/seguridad" className="text-muted text-[12px] hover:text-primary">
+            Mi cuenta
+          </Link>
+          <form action={logout}>
+            <button className="text-muted text-[12px] hover:text-danger cursor-pointer" type="submit">
+              Cerrar sesión
+            </button>
+          </form>
+        </div>
       </div>
     </aside>
   );
