@@ -5,6 +5,7 @@ import {
   jsonb,
   pgEnum,
   pgTable,
+  primaryKey,
   serial,
   text,
   timestamp,
@@ -18,14 +19,41 @@ import {
    (ver ROADMAP.md) — el esquema está pensado para crecer sin romper nada.
    ============================================================================= */
 
-export const roleEnum = pgEnum("role", ["ADMIN", "INFRA", "DEV", "STORE", "VIEWER"]);
+/**
+ * Roles DINÁMICOS: se crean/editan desde /admin/roles. `isSystem` marca los que
+ * no se pueden tocar (ADMIN): solo lectura y con TODOS los permisos siempre
+ * (incluidos los que se añadan en el futuro — se resuelve en código, no en BD).
+ */
+export const roles = pgTable("roles", {
+  /** Clave estable en MAYÚSCULAS (la que llevan los usuarios y la sesión) */
+  key: varchar("key", { length: 40 }).primaryKey(),
+  name: varchar("name", { length: 80 }).notNull(),
+  description: text("description"),
+  isSystem: boolean("is_system").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Permisos concedidos a cada rol. ADMIN no necesita filas (todo implícito). */
+export const rolePermissions = pgTable(
+  "role_permissions",
+  {
+    roleKey: varchar("role_key", { length: 40 })
+      .notNull()
+      .references(() => roles.key, { onDelete: "cascade", onUpdate: "cascade" }),
+    permission: varchar("permission", { length: 80 }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.roleKey, t.permission] })],
+);
 
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   email: varchar("email", { length: 255 }).notNull().unique(),
   name: varchar("name", { length: 120 }).notNull(),
   passwordHash: text("password_hash").notNull(),
-  role: roleEnum("role").notNull().default("VIEWER"),
+  role: varchar("role", { length: 40 })
+    .notNull()
+    .default("VIEWER")
+    .references(() => roles.key, { onDelete: "restrict", onUpdate: "cascade" }),
   /** Para el rol STORE en fases CRM: id de la tienda a la que pertenece */
   storeId: integer("store_id"),
   active: boolean("active").notNull().default(true),
