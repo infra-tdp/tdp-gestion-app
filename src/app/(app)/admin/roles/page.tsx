@@ -2,8 +2,8 @@ import { count } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import {
   ALL_PERMISSIONS,
-  LOCKED_PERMISSIONS,
   PERMISSION_META,
+  SENSITIVE_PERMISSIONS,
   getEffectiveMatrix,
   getRoles,
   requirePermission,
@@ -29,7 +29,7 @@ export default async function RolesPage() {
   }));
 
   // Agrupar permisos por módulo, preservando el orden de aparición.
-  type Row = { permission: Permission; label: string; locked: boolean; roles: string[] };
+  type Row = { permission: Permission; label: string; sensitive: boolean; roles: string[] };
   const modules: { module: string; rows: Row[] }[] = [];
   const idx = new Map<string, number>();
   for (const p of ALL_PERMISSIONS) {
@@ -41,7 +41,7 @@ export default async function RolesPage() {
     modules[idx.get(module)!].rows.push({
       permission: p,
       label,
-      locked: (LOCKED_PERMISSIONS as readonly Permission[]).includes(p),
+      sensitive: (SENSITIVE_PERMISSIONS as readonly Permission[]).includes(p),
       roles: matrix[p],
     });
   }
@@ -52,7 +52,8 @@ export default async function RolesPage() {
       <p className="text-muted text-sm -mt-3 mb-5">
         Crea y edita roles a medida y marca qué puede hacer cada uno, por módulo/pantalla. <b>ADMIN</b> es un
         rol de sistema de solo lectura: siempre tiene todo, incluidas las funciones que se añadan en el futuro.
-        Los cambios se aplican al instante.
+        Los permisos de Administración se pueden conceder a otros roles, pero llevan aviso ⚠ : quien los tenga
+        puede gestionar usuarios y roles (y ampliar sus propios permisos). Los cambios se aplican al instante.
       </p>
 
       <Card className="mb-5">
