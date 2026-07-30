@@ -72,10 +72,11 @@ export async function saveAgentSettings(formData: FormData): Promise<ActionResul
   await assertPermission("agente.manage");
 
   const mode = formData.get("mode") === "active" ? "active" : "shadow";
+  // OJO: extraInstructions NO se toca aquí (tiene su propio guardado en
+  // saveAgentContext); si lo incluyéramos, guardar ajustes borraría el contexto.
   const patch: Partial<AgentSettings> = {
     mode,
     repliesEnabled: formData.get("repliesEnabled") === "on",
-    extraInstructions: String(formData.get("extraInstructions") ?? "").trim(),
   };
   const debounce = Number(formData.get("debounceSeconds"));
   if (Number.isInteger(debounce) && debounce >= 10 && debounce <= 1800) {
@@ -87,6 +88,18 @@ export async function saveAgentSettings(formData: FormData): Promise<ActionResul
   }
 
   const res = await agentFetch("/admin/settings", { method: "PUT", body: patch });
+  revalidatePath("/agente");
+  return toError(res);
+}
+
+/** Guardado dedicado del contexto/reglas del agente (aplica en la próxima ejecución, sin redeploy). */
+export async function saveAgentContext(formData: FormData): Promise<ActionResult> {
+  await assertPermission("agente.manage");
+  const extraInstructions = String(formData.get("extraInstructions") ?? "").trim();
+  const res = await agentFetch("/admin/settings", {
+    method: "PUT",
+    body: { extraInstructions } satisfies Partial<AgentSettings>,
+  });
   revalidatePath("/agente");
   return toError(res);
 }
