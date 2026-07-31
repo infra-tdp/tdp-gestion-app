@@ -2,7 +2,12 @@ import { eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db, schema } from "@/lib/db";
 import { createSession, getSessionUser } from "@/lib/auth/session";
-import { GOOGLE_STATE_COOKIE, isGoogleConfigured, verifyGoogleCode } from "@/lib/auth/google";
+import {
+  GOOGLE_STATE_COOKIE,
+  isGoogleConfigured,
+  publicOrigin,
+  verifyGoogleCode,
+} from "@/lib/auth/google";
 
 /**
  * Callback OAuth de Google.
@@ -13,8 +18,11 @@ import { GOOGLE_STATE_COOKIE, isGoogleConfigured, verifyGoogleCode } from "@/lib
  */
 export async function GET(request: NextRequest) {
   const url = request.nextUrl;
+  // Origen público (tras Traefik, nextUrl.origin sería http://0.0.0.0:3000).
+  // El redirect_uri del intercambio debe ser IDÉNTICO al usado en /start.
+  const origin = publicOrigin(request.headers, url.origin);
   const fail = (dest: string, code: string) => {
-    const res = NextResponse.redirect(new URL(`${dest}?google_error=${code}`, url));
+    const res = NextResponse.redirect(new URL(`${dest}?google_error=${code}`, origin));
     res.cookies.delete(GOOGLE_STATE_COOKIE);
     return res;
   };
@@ -30,7 +38,7 @@ export async function GET(request: NextRequest) {
   const code = url.searchParams.get("code");
   if (!code) return fail(dest, "denied");
 
-  const redirectUri = new URL("/api/auth/google/callback", url).toString();
+  const redirectUri = `${origin}/api/auth/google/callback`;
   const identity = await verifyGoogleCode(code, redirectUri);
   if ("error" in identity) return fail(dest, "token");
   if (!identity.emailVerified) return fail(dest, "unverified");
@@ -48,7 +56,7 @@ export async function GET(request: NextRequest) {
     } catch {
       return fail(dest, "conflict"); // ese sub ya está vinculado a otro usuario
     }
-    const res = NextResponse.redirect(new URL("/settings/seguridad?google=linked", url));
+    const res = NextResponse.redirect(new URL("/settings/seguridad?google=linked", origin));
     res.cookies.delete(GOOGLE_STATE_COOKIE);
     return res;
   }
@@ -64,7 +72,7 @@ export async function GET(request: NextRequest) {
   if (user.email.toLowerCase() !== identity.email) return fail("/login", "email");
 
   await createSession({ id: user.id, email: user.email, name: user.name, role: user.role });
-  const res = NextResponse.redirect(new URL("/", url));
+  const res = NextResponse.redirect(new URL("/", origin));
   res.cookies.delete(GOOGLE_STATE_COOKIE);
   return res;
 }
