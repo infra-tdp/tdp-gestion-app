@@ -20,6 +20,21 @@ export function isGoogleConfigured(): boolean {
   return Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
 }
 
+/**
+ * Origen PÚBLICO de la app para construir URLs absolutas (redirect_uri y
+ * redirecciones al navegador). Dentro del contenedor `request.nextUrl.origin`
+ * es http://0.0.0.0:3000 (donde escucha Next), no el dominio que ve el usuario:
+ * se usa APP_URL si está definida y, si no, las cabeceras del proxy (Traefik).
+ */
+export function publicOrigin(headers: Headers, fallback: string): string {
+  const env = process.env.APP_URL?.trim();
+  if (env) return env.replace(/\/+$/, "");
+  const host = headers.get("x-forwarded-host") ?? headers.get("host");
+  if (!host || host.startsWith("0.0.0.0")) return fallback;
+  const proto = headers.get("x-forwarded-proto")?.split(",")[0]?.trim() || "https";
+  return `${proto}://${host}`;
+}
+
 export function googleAuthUrl(redirectUri: string, state: string): string {
   const params = new URLSearchParams({
     client_id: process.env.GOOGLE_CLIENT_ID!,
