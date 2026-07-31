@@ -31,7 +31,13 @@ export function publicOrigin(headers: Headers, fallback: string): string {
   if (env) return env.replace(/\/+$/, "");
   const host = headers.get("x-forwarded-host") ?? headers.get("host");
   if (!host || host.startsWith("0.0.0.0")) return fallback;
-  const proto = headers.get("x-forwarded-proto")?.split(",")[0]?.trim() || "https";
+  // Cloudflare termina el TLS antes que Traefik, así que x-forwarded-proto
+  // llega como "http" aunque el usuario navegue por https: en producción el
+  // origen público es SIEMPRE https (Google exige https en el redirect_uri).
+  const proto =
+    process.env.NODE_ENV === "production"
+      ? "https"
+      : headers.get("x-forwarded-proto")?.split(",")[0]?.trim() || "http";
   return `${proto}://${host}`;
 }
 
