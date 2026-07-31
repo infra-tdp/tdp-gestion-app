@@ -1,6 +1,6 @@
 import { desc, eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
-import { requireUser } from "@/lib/auth/rbac";
+import { requirePermission } from "@/lib/auth/rbac";
 import { Card, PageHeader, formatDate } from "@/components/ui";
 import { SshKeyControls } from "./ssh-key-controls";
 
@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Claves SSH" };
 
 export default async function SshKeysPage() {
-  const user = await requireUser();
+  const user = await requirePermission("sshkeys.manage");
   const keys = await db
     .select()
     .from(schema.sshKeys)

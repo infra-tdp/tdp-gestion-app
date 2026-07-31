@@ -18,6 +18,13 @@ export type NavLeafDef = {
   icon?: string;
   /** Permiso requerido (lo filtra el layout en el servidor). */
   permission?: Permission;
+  /**
+   * Visible para TODOS los usuarios sin pasar por el RBAC (Dashboard, Mi
+   * perfil). Política fail-closed del menú: una hoja sin `permission` y sin
+   * `public` solo la ve ADMIN — así un módulo nuevo que se cuele sin RBAC no
+   * aparece para todo el mundo.
+   */
+  public?: boolean;
   badge?: "notifications";
 };
 export type NavGroupDef = { id: string; label: string; icon?: string; children: NavDef[] };
@@ -26,7 +33,7 @@ export type NavDef = NavLeafDef | NavGroupDef;
 export const isGroupDef = (n: NavDef): n is NavGroupDef => "children" in n;
 
 export const NAV: NavDef[] = [
-  { id: "dashboard", href: "/", label: "Dashboard", icon: "dashboard" },
+  { id: "dashboard", href: "/", label: "Dashboard", icon: "dashboard", public: true },
   {
     id: "infra",
     label: "Infraestructura TI",
@@ -56,7 +63,7 @@ export const NAV: NavDef[] = [
         label: "Seguridad",
         icon: "security",
         children: [
-          { id: "security.ssh", href: "/settings/ssh-keys", label: "Claves SSH", icon: "keys" },
+          { id: "security.ssh", href: "/settings/ssh-keys", label: "Claves SSH", icon: "keys", permission: "sshkeys.manage" },
         ],
       },
     ],
@@ -81,8 +88,8 @@ export const NAV: NavDef[] = [
       { id: "admin.mail", href: "/admin/correo", label: "Correo de notificaciones", icon: "bell", permission: "mail.manage" },
     ],
   },
-  { id: "notifications", href: "/notificaciones", label: "Notificaciones", icon: "bell", badge: "notifications" },
-  { id: "profile", href: "/settings/seguridad", label: "Mi perfil", icon: "user" },
+  { id: "notifications", href: "/notificaciones", label: "Notificaciones", icon: "bell", badge: "notifications", permission: "notifications.view" },
+  { id: "profile", href: "/settings/seguridad", label: "Mi perfil", icon: "user", public: true },
 ];
 
 /* ------------------------- Personalización (overrides) -------------------- */

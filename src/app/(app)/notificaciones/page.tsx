@@ -1,6 +1,6 @@
 import { desc, eq, isNull, or } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
-import { requireUser } from "@/lib/auth/rbac";
+import { requirePermission } from "@/lib/auth/rbac";
 import { markNotificationsRead } from "@/lib/actions/users";
 import { Card, PageHeader, timeAgo } from "@/components/ui";
 
@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Notificaciones" };
 
 export default async function NotificationsPage() {
-  const user = await requireUser();
+  const user = await requirePermission("notifications.view");
   const notes = await db
     .select()
     .from(schema.notifications)

@@ -21,8 +21,15 @@ function filterNav(nodes: NavDef[], role: string): NavNode[] {
     if (isGroupDef(node)) {
       const children = filterNav(node.children, role);
       if (children.length) out.push({ id: node.id, label: node.label, icon: node.icon as NavNode["icon"], children });
-    } else if (!node.permission || hasPermission(role, node.permission)) {
-      out.push({ ...node, icon: node.icon as NavNode["icon"] });
+    } else {
+      // Fail-closed: sin `permission` y sin `public`, solo ADMIN ve la hoja —
+      // un módulo nuevo que se cuele sin RBAC no aparece para todo el mundo.
+      const visible = node.public
+        ? true
+        : node.permission
+          ? hasPermission(role, node.permission)
+          : role === "ADMIN";
+      if (visible) out.push({ ...node, icon: node.icon as NavNode["icon"] });
     }
   }
   return out;

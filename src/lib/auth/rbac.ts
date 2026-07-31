@@ -36,6 +36,8 @@ const DEFAULT_PERMISSIONS = {
   "ai.use": ["ADMIN", "INFRA", "DEV"],
   "agente.view": ["ADMIN", "INFRA", "DEV"],
   "agente.manage": ["ADMIN", "INFRA"],
+  "notifications.view": ["ADMIN", "INFRA", "DEV", "STORE", "VIEWER"],
+  "sshkeys.manage": ["ADMIN", "INFRA", "DEV"],
   "users.manage": ["ADMIN"],
   "roles.manage": ["ADMIN"],
   "nav.manage": ["ADMIN"],
@@ -76,6 +78,8 @@ export const PERMISSION_META: Record<Permission, { module: string; label: string
   "ai.use": { module: "Asistente", label: "Usar el asistente IA" },
   "agente.view": { module: "Agente WhatsApp", label: "Ver el agente de tareas" },
   "agente.manage": { module: "Agente WhatsApp", label: "Configurar chats, personas y modo del agente" },
+  "notifications.view": { module: "Notificaciones", label: "Ver notificaciones del sistema" },
+  "sshkeys.manage": { module: "Seguridad", label: "Claves SSH (acceso a devbox de staging)" },
   "users.manage": { module: "Administración", label: "Gestionar usuarios" },
   "roles.manage": { module: "Administración", label: "Configurar roles/permisos" },
   "nav.manage": { module: "Administración", label: "Organizar el menú de navegación" },
@@ -93,6 +97,14 @@ const SEED_ROLES: RoleInfo[] = [
 
 /** Clave legacy en app_settings (matriz anterior); se migra a role_permissions. */
 const LEGACY_SETTINGS_KEY = "rbac.overrides";
+
+/**
+ * Marcador en app_settings con los permisos del catálogo ya sembrados. Permite
+ * que un permiso AÑADIDO al catálogo después de la primera siembra reciba sus
+ * defaults en BDs existentes (sin él, nadie salvo ADMIN lo tendría y el menú
+ * desaparecería para todos al desplegar).
+ */
+const SEEDED_MARKER_KEY = "rbac.seeded_permissions";
 
 export type RoleInfo = {
   key: string;
@@ -160,6 +172,54 @@ async function seedRolePermissions(roleKeys: Set<string>): Promise<void> {
   if (row) {
     await db.delete(schema.appSettings).where(eq(schema.appSettings.key, LEGACY_SETTINGS_KEY));
   }
+  await writeSeededMarker();
+}
+
+/** Registra que TODO el catálogo actual quedó sembrado. */
+async function writeSeededMarker(): Promise<void> {
+  await db
+    .insert(schema.appSettings)
+    .values({ key: SEEDED_MARKER_KEY, value: ALL_PERMISSIONS })
+    .onConflictDoUpdate({
+      target: schema.appSettings.key,
+      set: { value: ALL_PERMISSIONS, updatedAt: new Date() },
+    });
+}
+
+/** Comprobación de permisos nuevos: una vez por proceso (la siembra es idempotente). */
+let newPermsChecked = false;
+
+/**
+ * Siembra los defaults de permisos AÑADIDOS al catálogo tras la primera
+ * siembra. Devuelve true si insertó algo. En BDs anteriores al marcador, se
+ * considera «conocido» lo que ya tiene filas (aprox. del catálogo de entonces).
+ */
+async function seedNewPermissions(
+  roleKeys: Set<string>,
+  permRows: { roleKey: string; permission: string }[],
+): Promise<boolean> {
+  const [row] = await db
+    .select()
+    .from(schema.appSettings)
+    .where(eq(schema.appSettings.key, SEEDED_MARKER_KEY))
+    .limit(1);
+  const known = row?.value
+    ? new Set(row.value as string[])
+    : new Set(permRows.map((r) => r.permission));
+  const missing = ALL_PERMISSIONS.filter((p) => !known.has(p));
+  if (missing.length) {
+    const values: { roleKey: string; permission: string }[] = [];
+    for (const p of missing) {
+      for (const r of DEFAULT_PERMISSIONS[p]) {
+        if (r !== "ADMIN" && roleKeys.has(r)) values.push({ roleKey: r, permission: p });
+      }
+    }
+    if (values.length) {
+      await db.insert(schema.rolePermissions).values(values).onConflictDoNothing();
+    }
+  }
+  if (missing.length || !row) await writeSeededMarker();
+  return missing.length > 0;
 }
 
 /** Lee roles + matriz desde BD (sembrando la primera vez). null si BD no lista. */
@@ -175,6 +235,11 @@ async function fetchRbac(): Promise<RbacCache | null> {
     if (permRows.length === 0) {
       await seedRolePermissions(new Set(roleRows.map((r) => r.key)));
       permRows = await db.select().from(schema.rolePermissions);
+    } else if (!newPermsChecked) {
+      newPermsChecked = true;
+      if (await seedNewPermissions(new Set(roleRows.map((r) => r.key)), permRows)) {
+        permRows = await db.select().from(schema.rolePermissions);
+      }
     }
 
     const matrix: Record<string, Set<string>> = {};

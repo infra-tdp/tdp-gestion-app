@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
-import { assertPermission, getRoles, requireUser } from "@/lib/auth/rbac";
+import { assertPermission, getRoles } from "@/lib/auth/rbac";
 import type { Role } from "@/lib/auth/session";
 
 /** Los roles son dinámicos: se validan contra la tabla `roles`. */
@@ -66,7 +66,7 @@ export async function resetUserPassword(userId: number, password: string): Promi
 /* ------------------------------ Claves SSH -------------------------------- */
 
 export async function addSshKey(formData: FormData): Promise<{ error?: string }> {
-  const user = await requireUser();
+  const user = await assertPermission("sshkeys.manage");
   const name = String(formData.get("name") ?? "").trim() || "clave";
   const publicKey = String(formData.get("publicKey") ?? "").trim();
   if (!/^(ssh-(ed25519|rsa)|ecdsa-sha2-\S+) [A-Za-z0-9+/=]+( \S+)?$/.test(publicKey)) {
@@ -78,7 +78,7 @@ export async function addSshKey(formData: FormData): Promise<{ error?: string }>
 }
 
 export async function deleteSshKey(keyId: number): Promise<void> {
-  const user = await requireUser();
+  const user = await assertPermission("sshkeys.manage");
   const [key] = await db.select().from(schema.sshKeys).where(eq(schema.sshKeys.id, keyId));
   if (!key) return;
   if (key.userId !== user.id && user.role !== "ADMIN") return;
@@ -89,7 +89,7 @@ export async function deleteSshKey(keyId: number): Promise<void> {
 /* ---------------------------- Notificaciones ------------------------------ */
 
 export async function markNotificationsRead(): Promise<void> {
-  const user = await requireUser();
+  const user = await assertPermission("notifications.view");
   await db
     .update(schema.notifications)
     .set({ read: true })
