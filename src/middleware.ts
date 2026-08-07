@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { indexingAllowed, NOINDEX_DIRECTIVES } from "@/lib/seo";
 
 const SESSION_COOKIE = "tdp_session";
-const PUBLIC_PATHS = ["/login", "/api/health", "/api/auth/google"];
+// /robots.txt debe ser público: si el gate de sesión lo redirige a /login, los
+// buscadores nunca leen las directivas.
+const PUBLIC_PATHS = ["/login", "/api/health", "/api/auth/google", "/robots.txt"];
 
 /**
  * Gate de sesión a nivel edge: sin cookie → /login. La verificación criptográfica
@@ -16,6 +19,10 @@ const PUBLIC_PATHS = ["/login", "/api/health", "/api/auth/google"];
  */
 function noStore(res: NextResponse): NextResponse {
   res.headers.set("Cache-Control", "private, no-store");
+  // Refuerzo de ALLOW_INDEXING: la etiqueta <meta robots> solo viaja en el HTML,
+  // así que la cabecera cubre además redirecciones, respuestas de API y cualquier
+  // otra cosa que un buscador pueda encontrar.
+  if (!indexingAllowed()) res.headers.set("X-Robots-Tag", NOINDEX_DIRECTIVES);
   return res;
 }
 

@@ -93,6 +93,7 @@ env:
   ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL }}
   TASK_AGENT_URL: ${{ vars.TASK_AGENT_URL }}
   TASK_AGENT_TOKEN: ${{ secrets.TASK_AGENT_TOKEN || vars.TASK_AGENT_TOKEN }}
+  ALLOW_INDEXING: ${{ vars.ALLOW_INDEXING }}
 
 jobs:
   bootstrap:
