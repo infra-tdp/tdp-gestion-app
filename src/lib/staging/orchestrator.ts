@@ -10,6 +10,7 @@ import {
   listServersCoolify,
   setAppDomainWhenReady,
   setAppEnvBulk,
+  waitForAppDeleted,
 } from "@/lib/infra/coolify";
 import {
   cloudflareRoutingConfigured,
@@ -441,7 +442,18 @@ export async function destroyStagingEnv(envId: number): Promise<void> {
     }
     if (env.coolifyAppUuid) {
       await deleteApp(env.coolifyAppUuid);
-      await logStep(envId, "coolify-delete", true, "Recurso de Coolify eliminado (con volúmenes)");
+      // El DELETE solo ENCOLA el borrado en Coolify. Esperamos a que el recurso
+      // desaparezca para saber que el `docker compose down -v` —lo que de verdad
+      // libera los volúmenes del staging— llegó a ejecutarse en el nodo.
+      const confirmed = await waitForAppDeleted(env.coolifyAppUuid);
+      await logStep(
+        envId,
+        "coolify-delete",
+        confirmed,
+        confirmed
+          ? "Recurso de Coolify eliminado (volúmenes del compose liberados)"
+          : "Coolify aceptó el borrado pero no lo confirmó a tiempo — revisa volúmenes huérfanos en el nodo",
+      );
     }
     if (!env.prNumber) {
       await deleteBranch(env.branch);

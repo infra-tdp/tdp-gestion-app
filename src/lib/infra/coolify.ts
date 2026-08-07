@@ -50,7 +50,21 @@ export function coolifyConfigured(): boolean {
   return Boolean(process.env.COOLIFY_API_URL && process.env.COOLIFY_TOKEN);
 }
 
-type CoolifyServer = { uuid: string; name: string; ip?: string; is_coolify_host?: boolean };
+type CoolifyServerSettings = {
+  delete_unused_volumes?: unknown;
+  delete_unused_networks?: unknown;
+  docker_cleanup_frequency?: unknown;
+  docker_cleanup_threshold?: unknown;
+  force_server_cleanup?: unknown;
+  is_reachable?: unknown;
+};
+type CoolifyServer = {
+  uuid: string;
+  name: string;
+  ip?: string;
+  is_coolify_host?: boolean;
+  settings?: CoolifyServerSettings | null;
+};
 type CoolifyProject = { uuid: string; name: string; description?: string };
 type CoolifyResource = { uuid: string; name: string; type?: string; status?: string };
 type CoolifyGithubApp = {
@@ -103,6 +117,52 @@ export async function listServersCoolify(): Promise<
     ip: s.ip ?? "",
     isCoolifyHost: Boolean(s.is_coolify_host),
   }));
+}
+
+export type ServerHygiene = {
+  uuid: string;
+  name: string;
+  reachable: boolean;
+  /** Coolify poda volúmenes sin usar en su limpieza periódica (por defecto NO). */
+  deleteUnusedVolumes: boolean;
+  deleteUnusedNetworks: boolean;
+  /** Cron de la limpieza de Docker en el nodo. */
+  cleanupFrequency: string;
+  /** % de disco a partir del cual Coolify lanza la limpieza fuera de hora. */
+  cleanupThreshold: number | null;
+};
+
+function truthy(value: unknown): boolean {
+  return value === true || value === 1 || value === "1" || value === "true";
+}
+
+/**
+ * Estado de la limpieza automática de Docker en cada servidor de Coolify.
+ *
+ * Sirve de red de seguridad del arreglo de `deleteApp`: aquel evita crear
+ * volúmenes huérfanos NUEVOS desde este panel, pero los que ya existen (o los que
+ * genere alguien borrando un recurso a mano desde Coolify) solo desaparecen si el
+ * servidor tiene activado «Delete unused volumes», que viene DESACTIVADO de fábrica
+ * y es lo único que añade `docker volume prune -af` a la limpieza periódica.
+ *
+ * La API de Coolify expone ese flag en GET /servers (settings) pero NO deja
+ * cambiarlo por PATCH, así que aquí solo se lee para poder avisar en la UI.
+ */
+export async function listServersHygiene(): Promise<ServerHygiene[]> {
+  const servers = unwrapList<CoolifyServer>(await coolify("/servers"), "GET /servers");
+  return servers.map((s) => {
+    const st = s.settings ?? {};
+    const threshold = Number(st.docker_cleanup_threshold);
+    return {
+      uuid: s.uuid,
+      name: s.name,
+      reachable: truthy(st.is_reachable),
+      deleteUnusedVolumes: truthy(st.delete_unused_volumes),
+      deleteUnusedNetworks: truthy(st.delete_unused_networks),
+      cleanupFrequency: typeof st.docker_cleanup_frequency === "string" ? st.docker_cleanup_frequency : "",
+      cleanupThreshold: Number.isFinite(threshold) ? threshold : null,
+    };
+  });
 }
 
 /** Proyectos de Coolify donde alojar el recurso de staging. */
@@ -389,11 +449,85 @@ export async function setAppDomainWhenReady(
     : new Error("No se pudo fijar el dominio: Coolify no parseó el compose a tiempo");
 }
 
-export async function deleteApp(appUuid: string): Promise<void> {
-  await coolify(
-    `/applications/${appUuid}?delete_configurations=true&delete_volumes=true&docker_cleanup=true&delete_connected_networks=true`,
-    { method: "DELETE" },
-  );
+export type DeleteAppOptions = {
+  /** Borra /data/coolify/applications/<uuid> en el nodo. Por defecto FALSE — ver aviso. */
+  deleteConfigurations?: boolean;
+  deleteVolumes?: boolean;
+  dockerCleanup?: boolean;
+  deleteConnectedNetworks?: boolean;
+};
+
+/**
+ * Borra un recurso de Coolify.
+ *
+ * ⚠️ `deleteConfigurations` va a FALSE A PROPÓSITO (si no, se fuga el disco del nodo).
+ *
+ * Coolify borra los recursos en este orden (app/Jobs/DeleteResourceJob.php):
+ *   1. `deleteConfigurations()` → `rm -rf /data/coolify/applications/<uuid>`
+ *   2. `deleteVolumes()` → y para build_pack=dockercompose (nuestros stagings) eso es
+ *      literalmente `cd /data/coolify/applications/<uuid> && docker compose down -v`
+ *
+ * Es decir: si se pide borrar configuraciones, Coolify borra PRIMERO el directorio
+ * donde vive el docker-compose.yml y después intenta hacer `cd` a ese directorio ya
+ * inexistente. El comando falla, pero se ejecuta con `throwError: false`, así que el
+ * DELETE responde 200 y los volúmenes con nombre del compose (mysql-data, wp-code,
+ * devbox-home, restore-state, fastcgi-cache…) se quedan huérfanos en el nodo para
+ * siempre: nadie los referencia y nadie los borra. El `docker_cleanup` posterior
+ * tampoco los toca — Coolify lo lanza como `CleanupDocker(server, deleteUnusedVolumes:
+ * false, deleteUnusedNetworks: false)`, o sea poda imágenes y contenedores pero NUNCA
+ * volúmenes. Así se llenó coolify-prod-2 (25 GB en /var/lib/docker/volumes, 5 juegos
+ * completos de volúmenes de stagings ya destruidos).
+ *
+ * Dejando `delete_configurations=false` el directorio sobrevive al `compose down -v`,
+ * los volúmenes se liberan de verdad y solo queda atrás el directorio de config
+ * (unos KB de yaml/env frente a varios GB de volúmenes). Es el intercambio correcto.
+ *
+ * La red de seguridad para lo que ya se haya escapado (o para entornos borrados a
+ * mano desde el panel de Coolify) es activar «Delete unused volumes» en el servidor;
+ * la app lo vigila y avisa en Infraestructura → Nodos (ver listServersHygiene).
+ */
+export async function deleteApp(appUuid: string, opts: DeleteAppOptions = {}): Promise<void> {
+  const query = new URLSearchParams({
+    delete_configurations: String(opts.deleteConfigurations ?? false),
+    delete_volumes: String(opts.deleteVolumes ?? true),
+    docker_cleanup: String(opts.dockerCleanup ?? true),
+    delete_connected_networks: String(opts.deleteConnectedNetworks ?? true),
+  });
+  await coolify(`/applications/${appUuid}?${query.toString()}`, { method: "DELETE" });
+}
+
+/** ¿Existe todavía el recurso en Coolify? (404 = ya no) */
+async function appExists(appUuid: string): Promise<boolean> {
+  try {
+    await coolify(`/applications/${appUuid}`);
+    return true;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/→ 404/.test(msg)) return false;
+    throw err; // 401/5xx: no sabemos, que lo gestione quien llama
+  }
+}
+
+/**
+ * Espera a que Coolify TERMINE de borrar el recurso. El DELETE de la API solo
+ * encola un job («Application deletion request queued»), así que sin esperar no
+ * sabemos si el `docker compose down -v` que libera los volúmenes llegó a correr.
+ * Devuelve false si no se confirma a tiempo (no lanza: el borrado sigue en curso).
+ */
+export async function waitForAppDeleted(
+  appUuid: string,
+  attempts = 15,
+  delayMs = 3000,
+): Promise<boolean> {
+  for (let i = 0; i < attempts; i++) {
+    try {
+      if (!(await appExists(appUuid))) return true;
+    } catch {
+      return false; // la API dejó de responder: no podemos confirmarlo
+    }
+    await new Promise((r) => setTimeout(r, delayMs));
+  }
+  return false;
 }
 
 /** Redeploya cualquier recurso por uuid — igual que el workflow build.yml de la web. */
