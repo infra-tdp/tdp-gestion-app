@@ -69,6 +69,10 @@ const APP_ENVS = [
   { key: "ANTHROPIC_MODEL" },
   { key: "TASK_AGENT_URL" },
   { key: "TASK_AGENT_TOKEN" },
+  // Visibilidad en buscadores. Sin definir = el panel NO se indexa. Para volver a
+  // ocultarlo tras haberlo abierto hay que poner 0: borrar la variable no basta,
+  // porque la sincronización salta los valores vacíos y Coolify conserva el anterior.
+  { key: "ALLOW_INDEXING" },
 ];
 
 function required(name) {

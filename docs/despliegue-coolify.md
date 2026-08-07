@@ -109,6 +109,37 @@ contenedor esté en la red `coolify` (el 404 lo devuelve Traefik, no la app).
 Las migraciones se aplican solas en cada arranque (`docker-entrypoint.sh`) y
 `/api/health` es el healthcheck.
 
+### Buscadores (el panel no se indexa)
+
+El dominio es público, así que Google podría llegar a la portada de login. Por
+defecto la app pide quedarse fuera de los buscadores en las tres capas que
+miran: `/robots.txt` (`Disallow: /`), la etiqueta `<meta name="robots">` del
+HTML y la cabecera `X-Robots-Tag` de todas las respuestas.
+
+El interruptor es la variable `ALLOW_INDEXING` (variable del repo en GitHub, la
+sincroniza el workflow de deploy):
+
+| Valor | Efecto |
+| --- | --- |
+| sin definir, `0`, `false` | el panel no se indexa (lo normal) |
+| `1`, `true`, `yes`, `on` | se permite indexar |
+
+Se lee en cada petición, así que cambiarla y redesplegar basta — no hay que
+reconstruir la imagen. Para volver a ocultar el panel pon `ALLOW_INDEXING=0`:
+borrar la variable no vale, porque la sincronización salta los valores vacíos y
+Coolify conserva el anterior.
+
+Comprobación rápida tras desplegar:
+
+```bash
+curl -s https://gestion.tallerdelpatinete.es/robots.txt      # Disallow: /
+curl -sI https://gestion.tallerdelpatinete.es/login | grep -i x-robots-tag
+```
+
+Ojo: esto le pide a los buscadores que no aparezcan; **no** es un control de
+acceso (de eso se encargan el login y el RBAC). Si una URL ya está indexada,
+además hay que pedir su retirada en Search Console.
+
 ## 4. Requisitos para el módulo de staging
 
 1. **PR en la web**: `docker-compose.staging.yaml` mergeado en
