@@ -129,7 +129,44 @@ del panel, en `tdp-app-wordpress-prod`:
 Settings → Branches → protección de `main` con "Require a pull request before
 merging" + "Require approvals (1)" y "Dismiss stale approvals".
 
-## 6. Actualizar
+## 6. Higiene de disco en los nodos (volúmenes huérfanos)
+
+Los stagings son stacks Docker Compose con volúmenes con nombre (`mysql-data`,
+`wp-code`, `devbox-home`, `restore-state`, `fastcgi-cache`). Al destruirlos hay
+que asegurarse de que esos volúmenes se van con ellos, o el disco del nodo se
+llena solo: en `coolify-prod-2` se acumularon 25 GB en `/var/lib/docker/volumes`
+(5 juegos completos de stagings ya destruidos, sin ningún contenedor asociado).
+
+**Por qué pasaba.** Coolify borra los recursos en este orden
+(`app/Jobs/DeleteResourceJob.php`): primero `deleteConfigurations()`
+(`rm -rf /data/coolify/applications/<uuid>`) y después `deleteVolumes()`, que
+para un recurso Compose es `cd /data/coolify/applications/<uuid> && docker
+compose down -v`. Si se pide borrar configuraciones, el `cd` apunta a un
+directorio que Coolify acaba de borrar: el comando falla en silencio
+(`throwError: false`), el DELETE responde 200 y los volúmenes se quedan
+huérfanos. El `docker_cleanup` posterior tampoco los toca — Coolify lo lanza
+con `deleteUnusedVolumes: false`, así que poda imágenes y contenedores, nunca
+volúmenes.
+
+**Lo que hace la app.** `deleteApp()` manda `delete_configurations=false`, de
+modo que el directorio sobrevive al `compose down -v` y los volúmenes se
+liberan de verdad; solo queda atrás el directorio de configuración (unos KB de
+yaml/env frente a varios GB de volúmenes). Además, tras el DELETE la app espera
+a que el recurso desaparezca de la API antes de dar el entorno por destruido —
+el DELETE solo *encola* el borrado — y lo registra en el historial del entorno.
+
+**Lo que hay que activar a mano (una vez por nodo).** Coolify → Servers → el
+nodo → Advanced → **Delete unused volumes**. Es lo único que añade
+`docker volume prune -af` a la limpieza periódica y cubre lo que se borre
+directamente desde el panel de Coolify, fuera de este panel. La API expone el
+ajuste en `GET /servers` pero no deja cambiarlo, así que Infraestructura →
+Nodos muestra el estado por nodo y avisa mientras siga desactivado.
+
+Limpieza puntual de lo ya acumulado (comprobando antes que nadie los usa con
+`docker ps -a --filter volume=<nombre>`): `docker volume rm <nombre>`, o
+`docker volume prune -f` para barrer todos los que no tengan contenedor.
+
+## 7. Actualizar
 
 Push a `main` → Coolify recompila y despliega. Rollback: redeploy de un
 deployment anterior desde la UI de Coolify.
