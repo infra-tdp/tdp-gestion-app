@@ -53,6 +53,8 @@ const APP_ENVS = [
   { key: "STAGING_DOMAIN_BASE" },
   { key: "STAGING_DOMAIN_SUFFIX" },
   { key: "STAGING_DEVBOX_HOST" },
+  { key: "STAGING_DEVBOX_HOSTS" },
+  { key: "ZEROTIER_IP_PREFIX" },
   { key: "STAGING_DEVBOX_PORT_BASE" },
   { key: "STAGING_GIT_TOKEN" },
   { key: "STAGING_COMPOSE_LOCATION" },
