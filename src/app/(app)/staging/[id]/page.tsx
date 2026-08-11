@@ -3,6 +3,7 @@ import { asc, eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { hasPermission, requirePermission } from "@/lib/auth/rbac";
 import { Badge, Card, PageHeader, StatusBadge, formatDate, timeAgo, timeUntil } from "@/components/ui";
+import { resolveDevboxHost, type DevboxHost } from "@/lib/staging/devbox";
 import { StagingActions } from "./staging-actions";
 import { AutoRefresh } from "./auto-refresh";
 
@@ -32,7 +33,9 @@ export default async function StagingDetailPage({ params }: { params: Promise<{ 
   const canDestroy = isOwner || hasPermission(user.role, "staging.destroy.any");
   const canMerge = hasPermission(user.role, "pr.merge") && !isOwner;
   const live = env.status === "pending" || env.status === "provisioning" || env.status === "destroying";
-  const devboxHost = process.env.STAGING_DEVBOX_HOST ?? "<host-coolify>";
+  // El devbox escucha en el NODO donde cayó el entorno, alcanzable por ZeroTier.
+  const devbox = await resolveDevboxHost(env.serverUuid);
+  const devboxHost = devbox.host ?? "<ip-zerotier-del-nodo>";
 
   return (
     <>
@@ -73,6 +76,7 @@ export default async function StagingDetailPage({ params }: { params: Promise<{ 
               <dt className="text-muted w-28 shrink-0">SSH devbox</dt>
               <dd>
                 <code className="text-primary">ssh -p {env.devboxPort ?? "—"} wpdev@{devboxHost}</code>
+                <DevboxHostNote devbox={devbox} />
               </dd>
             </div>
             <div className="flex gap-2">
@@ -139,4 +143,34 @@ export default async function StagingDetailPage({ params }: { params: Promise<{ 
       </Card>
     </>
   );
+}
+
+/**
+ * Aclara de dónde sale el host del comando ssh: el devbox solo escucha en el
+ * nodo donde se creó el entorno y se llega por ZeroTier, así que conviene decir
+ * qué nodo es — y avisar cuando la IP no parece de la red de ZeroTier o cuando
+ * no se ha podido averiguar.
+ */
+function DevboxHostNote({ devbox }: { devbox: DevboxHost }) {
+  if (!devbox.host) {
+    return (
+      <p className="text-warning text-[12px] mt-1">
+        No se pudo resolver la IP del nodo (¿Coolify no responde?). Búscala en Infraestructura → Nodos o
+        defínela con STAGING_DEVBOX_HOSTS.
+      </p>
+    );
+  }
+  const node = devbox.nodeName ? `nodo ${devbox.nodeName}` : "nodo del entorno";
+  if (devbox.source === "zerotier") {
+    return <p className="text-muted text-[12px] mt-1">IP de ZeroTier del {node} — conéctate con ZeroTier levantado.</p>;
+  }
+  if (devbox.source === "coolify") {
+    return (
+      <p className="text-warning text-[12px] mt-1">
+        IP del {node} según Coolify, pero no parece de la red de ZeroTier. Si no conecta, fija la correcta en
+        STAGING_DEVBOX_HOSTS.
+      </p>
+    );
+  }
+  return <p className="text-muted text-[12px] mt-1">Host fijo configurado (STAGING_DEVBOX_HOST).</p>;
 }
