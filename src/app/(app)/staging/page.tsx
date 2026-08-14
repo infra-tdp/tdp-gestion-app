@@ -65,7 +65,9 @@ export default async function StagingListPage() {
                   )}
                 </td>
                 <td className="text-muted">{userName ?? "—"}</td>
-                <td className="text-muted">{env.expiresAt ? timeUntil(env.expiresAt) : "—"}</td>
+                <td className={expiringSoon(env.status, env.expiresAt) ? "text-warning font-semibold" : "text-muted"}>
+                  {env.expiresAt ? timeUntil(env.expiresAt) : "—"}
+                </td>
               </tr>
             ))}
             {envs.length === 0 && (
@@ -80,4 +82,13 @@ export default async function StagingListPage() {
       </Card>
     </>
   );
+}
+
+/**
+ * Marca en ámbar los entornos a punto de caducar: el sweeper los destruye solos,
+ * así que conviene verlos de un vistazo y entrar a extenderles el tiempo.
+ */
+function expiringSoon(status: string, expiresAt: Date | null): boolean {
+  if (status === "destroyed" || status === "destroying" || !expiresAt) return false;
+  return expiresAt.getTime() - Date.now() < 6 * 3600_000;
 }

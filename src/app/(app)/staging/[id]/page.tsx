@@ -33,6 +33,11 @@ export default async function StagingDetailPage({ params }: { params: Promise<{ 
   const canDestroy = isOwner || hasPermission(user.role, "staging.destroy.any");
   const canMerge = hasPermission(user.role, "pr.merge") && !isOwner;
   const live = env.status === "pending" || env.status === "provisioning" || env.status === "destroying";
+  const EXPIRY_WARN_HOURS = 6;
+  const soonExpiring =
+    env.status !== "destroyed" &&
+    Boolean(env.expiresAt) &&
+    env.expiresAt!.getTime() - Date.now() < EXPIRY_WARN_HOURS * 3600_000;
   // El devbox escucha en el NODO donde cayó el entorno, alcanzable por ZeroTier.
   const devbox = await resolveDevboxHost(env.serverUuid);
   const devboxHost = devbox.host ?? "<ip-zerotier-del-nodo>";
@@ -46,7 +51,12 @@ export default async function StagingDetailPage({ params }: { params: Promise<{ 
         <Badge tone="outline">:{env.imageTag}</Badge>
         <span className="text-muted">de {userName ?? "—"}</span>
         <span className="text-muted">· creado {formatDate(env.createdAt)}</span>
-        {env.expiresAt && <span className="text-muted">· caduca {timeUntil(env.expiresAt)}</span>}
+        {env.expiresAt && (
+          // Cuando queda poco, se pinta en ámbar: es el aviso de "extiende o pierdes el entorno".
+          <span className={soonExpiring ? "text-warning font-semibold" : "text-muted"} title={formatDate(env.expiresAt)}>
+            · caduca {timeUntil(env.expiresAt)}
+          </span>
+        )}
         {live && <AutoRefresh />}
       </div>
 
