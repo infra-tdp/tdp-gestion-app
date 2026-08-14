@@ -40,6 +40,13 @@ import { createNotification } from "@/lib/notify";
 
 const DEVBOX_PORT_BASE = Number(process.env.STAGING_DEVBOX_PORT_BASE ?? 22000);
 
+/**
+ * Techo de vida TOTAL de un entorno (horas desde su creación), prórrogas
+ * incluidas. Sin él, "extender" convertiría cualquier staging en permanente y
+ * volveríamos al problema de siempre: nodos llenos de entornos que nadie usa.
+ */
+const MAX_TTL_HOURS = Math.max(1, Number(process.env.STAGING_MAX_TTL_HOURS ?? 336));
+
 function genSecret(bytes = 48): string {
   return randomBytes(bytes).toString("base64");
 }
@@ -468,6 +475,58 @@ export async function destroyStagingEnv(envId: number): Promise<void> {
     await setStatus(envId, "error", { errorMessage: message });
     throw err;
   }
+}
+
+/**
+ * Alarga la caducidad de un entorno vivo.
+ *
+ * Las horas se SUMAN al vencimiento actual (o a "ahora" si ya venció y el sweeper
+ * todavía no ha pasado — así una prórroga de última hora da tiempo real y no
+ * horas ya consumidas), con el techo de MAX_TTL_HOURS desde la creación.
+ */
+export async function extendStagingEnv(
+  envId: number,
+  hours: number,
+): Promise<{ expiresAt: Date; capped: boolean }> {
+  const [env] = await db.select().from(schema.stagingEnvs).where(eq(schema.stagingEnvs.id, envId));
+  if (!env) throw new Error("Entorno no encontrado");
+  if (env.status === "destroyed" || env.status === "destroying") {
+    throw new Error("El entorno está destruido — no se puede extender");
+  }
+
+  const now = Date.now();
+  const from = Math.max(env.expiresAt?.getTime() ?? now, now);
+  const ceiling = env.createdAt.getTime() + MAX_TTL_HOURS * 3600_000;
+  if (from >= ceiling) {
+    throw new Error(
+      `El entorno ya ha agotado su vida máxima (${MAX_TTL_HOURS} h desde su creación). Abre la PR o crea uno nuevo.`,
+    );
+  }
+
+  const wanted = from + hours * 3600_000;
+  const capped = wanted > ceiling;
+  const expiresAt = new Date(capped ? ceiling : wanted);
+
+  await db
+    .update(schema.stagingEnvs)
+    .set({ expiresAt, updatedAt: new Date() })
+    .where(eq(schema.stagingEnvs.id, envId));
+
+  const stamp = expiresAt.toLocaleString("es-ES", {
+    dateStyle: "short",
+    timeStyle: "short",
+    timeZone: "Europe/Madrid",
+  });
+  await logStep(
+    envId,
+    "ttl-extend",
+    true,
+    capped
+      ? `Caducidad ampliada hasta el techo de vida (${MAX_TTL_HOURS} h): ${stamp}`
+      : `Caducidad ampliada +${hours} h: ${stamp}`,
+  );
+
+  return { expiresAt, capped };
 }
 
 /** Sweeper de caducidad: destruye entornos activos cuyo TTL ha vencido. */

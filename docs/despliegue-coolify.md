@@ -153,14 +153,36 @@ además hay que pedir su retirada en Search Console.
    clonar/push; NO reutilizar el `GITHUB_TOKEN` general.
 5. **Registro ghcr en Coolify** ya configurado (existe: lo usa preprod).
 
-## 5. Separación de funciones en PRs (recomendado)
+## 5. Caducidad de los entornos staging (TTL y prórrogas)
+
+Cada entorno nace con una duración elegida al solicitarlo (8 h / 24 h / 72 h /
+1 semana). Un sweeper interno pasa cada 5 minutos y **destruye solo** los que ya
+han vencido (estados `active` y `error`), liberando nodo, volúmenes y ruta de
+Cloudflare; la rama se conserva si tiene PR abierta.
+
+Si el dev necesita más tiempo, en el detalle del entorno hay **Extender tiempo**
+(+3 h / +8 h / +24 h / +72 h). Las horas se suman a la caducidad vigente, o a
+"ahora mismo" si el entorno ya había vencido y el sweeper todavía no había
+pasado — así una prórroga de última hora da tiempo real. La prórroga queda en el
+registro de provisión del entorno (paso `ttl-extend`), y puede pedirla el dueño
+del entorno o cualquiera con `staging.destroy.any` (ADMIN/INFRA).
+
+`STAGING_MAX_TTL_HOURS` (por defecto **336 h = 14 días**) es el techo de vida
+total contado desde la creación: al llegar ahí, extender deja de sumar y el
+panel lo dice. Es lo que evita que un staging se vuelva permanente a base de
+prórrogas y acabe ocupando disco del nodo indefinidamente.
+
+En el listado y en el detalle, la caducidad se pinta en ámbar cuando quedan
+menos de 6 horas.
+
+## 6. Separación de funciones en PRs (recomendado)
 
 La app ya impide que un dev mergee su propia PR. Para blindarlo también fuera
 del panel, en `tdp-app-wordpress-prod`:
 Settings → Branches → protección de `main` con "Require a pull request before
 merging" + "Require approvals (1)" y "Dismiss stale approvals".
 
-## 6. Higiene de disco en los nodos (volúmenes huérfanos)
+## 7. Higiene de disco en los nodos (volúmenes huérfanos)
 
 Los stagings son stacks Docker Compose con volúmenes con nombre (`mysql-data`,
 `wp-code`, `devbox-home`, `restore-state`, `fastcgi-cache`). Al destruirlos hay
@@ -197,7 +219,7 @@ Limpieza puntual de lo ya acumulado (comprobando antes que nadie los usa con
 `docker ps -a --filter volume=<nombre>`): `docker volume rm <nombre>`, o
 `docker volume prune -f` para barrer todos los que no tengan contenedor.
 
-## 7. Actualizar
+## 8. Actualizar
 
 Push a `main` → Coolify recompila y despliega. Rollback: redeploy de un
 deployment anterior desde la UI de Coolify.

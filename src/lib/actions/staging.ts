@@ -5,7 +5,12 @@ import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { assertPermission } from "@/lib/auth/rbac";
 import { createNotification } from "@/lib/notify";
-import { destroyStagingEnv, redeployStagingEnv, requestStagingEnv } from "@/lib/staging/orchestrator";
+import {
+  destroyStagingEnv,
+  extendStagingEnv,
+  redeployStagingEnv,
+  requestStagingEnv,
+} from "@/lib/staging/orchestrator";
 import { createPullRequest, getPullRequest, mergePullRequest } from "@/lib/infra/github";
 
 export async function requestStaging(formData: FormData): Promise<{ id?: number; error?: string }> {
@@ -62,6 +67,35 @@ export async function redeployStaging(envId: number): Promise<{ error?: string }
     await redeployStagingEnv(envId);
     revalidatePath(`/staging/${envId}`);
     return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/**
+ * Aplaza la caducidad del entorno. Mismo criterio de permisos que redesplegar:
+ * el dueño del entorno, o alguien de ADMIN/INFRA.
+ */
+export async function extendStaging(
+  envId: number,
+  hours: number,
+): Promise<{ expiresAt?: string; capped?: boolean; error?: string }> {
+  const user = await assertPermission("staging.view");
+  if (!Number.isInteger(hours) || hours < 1 || hours > 168) return { error: "Duración inválida" };
+  const [env] = await db.select().from(schema.stagingEnvs).where(eq(schema.stagingEnvs.id, envId));
+  if (!env) return { error: "Entorno no encontrado" };
+  if (env.requestedBy !== user.id) {
+    try {
+      await assertPermission("staging.destroy.any");
+    } catch {
+      return { error: "Solo puedes extender tus propios entornos" };
+    }
+  }
+  try {
+    const { expiresAt, capped } = await extendStagingEnv(envId, hours);
+    revalidatePath(`/staging/${envId}`);
+    revalidatePath("/staging");
+    return { expiresAt: expiresAt.toISOString(), capped };
   } catch (err) {
     return { error: err instanceof Error ? err.message : String(err) };
   }
