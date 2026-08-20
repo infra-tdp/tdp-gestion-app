@@ -161,16 +161,20 @@ han vencido (estados `active` y `error`), liberando nodo, volúmenes y ruta de
 Cloudflare; la rama se conserva si tiene PR abierta.
 
 Si el dev necesita más tiempo, en el detalle del entorno hay **Extender tiempo**
-(+3 h / +8 h / +24 h / +72 h). Las horas se suman a la caducidad vigente, o a
-"ahora mismo" si el entorno ya había vencido y el sweeper todavía no había
+(+3 h / +8 h / +24 h / +72 h / +7 d). Las horas se suman a la caducidad vigente,
+o a "ahora mismo" si el entorno ya había vencido y el sweeper todavía no había
 pasado — así una prórroga de última hora da tiempo real. La prórroga queda en el
 registro de provisión del entorno (paso `ttl-extend`), y puede pedirla el dueño
 del entorno o cualquiera con `staging.destroy.any` (ADMIN/INFRA).
 
-`STAGING_MAX_TTL_HOURS` (por defecto **336 h = 14 días**) es el techo de vida
-total contado desde la creación: al llegar ahí, extender deja de sumar y el
-panel lo dice. Es lo que evita que un staging se vuelva permanente a base de
-prórrogas y acabe ocupando disco del nodo indefinidamente.
+El único límite es **cuánto se puede ver hacia delante**:
+`STAGING_EXTEND_HORIZON_HOURS` (por defecto **168 h = 7 días**). Una prórroga
+nunca deja la caducidad a más de esa distancia de *ahora*; si se pide más, se
+recorta al tope y el panel lo dice. La ventana es **deslizante**, no un tope de
+vida total: si hoy dejas el entorno a 7 días vista, hoy ya no puedes estirarlo
+más —el panel responde cuánto falta para poder repetir—, pero mañana vuelve a
+haber margen y se extiende otra vez hasta 7 días. Así un entorno puede durar lo
+que haga falta sin que nadie lo deje reservado semanas por delante.
 
 En el listado y en el detalle, la caducidad se pinta en ámbar cuando quedan
 menos de 6 horas.

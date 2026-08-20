@@ -41,11 +41,29 @@ import { createNotification } from "@/lib/notify";
 const DEVBOX_PORT_BASE = Number(process.env.STAGING_DEVBOX_PORT_BASE ?? 22000);
 
 /**
- * Techo de vida TOTAL de un entorno (horas desde su creación), prórrogas
- * incluidas. Sin él, "extender" convertiría cualquier staging en permanente y
- * volveríamos al problema de siempre: nodos llenos de entornos que nadie usa.
+ * Ventana máxima de caducidad: por muchas prórrogas que se pidan, un entorno
+ * nunca queda programado a más de estas horas VISTA (por defecto 7 días).
+ *
+ * No es un tope de vida total — la ventana avanza con el reloj: si hoy lo dejas
+ * en el tope, mañana vuelve a haber margen y se puede extender otros 7 días. Lo
+ * que evita es reservar un staging semanas por delante ocupando disco del nodo.
  */
-const MAX_TTL_HOURS = Math.max(1, Number(process.env.STAGING_MAX_TTL_HOURS ?? 336));
+const EXTEND_HORIZON_HOURS = Math.max(1, Number(process.env.STAGING_EXTEND_HORIZON_HOURS ?? 168));
+
+/** Prórroga mínima útil: por debajo de esto no se toca la fecha y se dice cuándo volver. */
+const MIN_EXTEND_GAIN_MS = 3600_000;
+
+/** Tope de horas vista que aplica el servidor — lo usa el panel para su UI. */
+export function extendHorizonHours(): number {
+  return EXTEND_HORIZON_HOURS;
+}
+
+/** "168" → "7 días"; "24" → "1 día"; "30" → "30 h". Para los mensajes que ve el dev. */
+function describeHours(hours: number): string {
+  if (hours % 24 !== 0) return `${hours} h`;
+  const days = hours / 24;
+  return days === 1 ? "1 día" : `${days} días`;
+}
 
 function genSecret(bytes = 48): string {
   return randomBytes(bytes).toString("base64");
@@ -482,7 +500,11 @@ export async function destroyStagingEnv(envId: number): Promise<void> {
  *
  * Las horas se SUMAN al vencimiento actual (o a "ahora" si ya venció y el sweeper
  * todavía no ha pasado — así una prórroga de última hora da tiempo real y no
- * horas ya consumidas), con el techo de MAX_TTL_HOURS desde la creación.
+ * horas ya consumidas), sin pasar nunca de EXTEND_HORIZON_HOURS vista.
+ *
+ * Como la ventana es DESLIZANTE, un entorno que ya está en el tope no puede
+ * estirarse más ahora, pero sí más adelante: el error dice cuánto falta para
+ * que vuelva a haber margen.
  */
 export async function extendStagingEnv(
   envId: number,
@@ -496,16 +518,19 @@ export async function extendStagingEnv(
 
   const now = Date.now();
   const from = Math.max(env.expiresAt?.getTime() ?? now, now);
-  const ceiling = env.createdAt.getTime() + MAX_TTL_HOURS * 3600_000;
-  if (from >= ceiling) {
+  const horizon = now + EXTEND_HORIZON_HOURS * 3600_000;
+  const room = horizon - from;
+  if (room < MIN_EXTEND_GAIN_MS) {
+    const wait = Math.ceil((MIN_EXTEND_GAIN_MS - room) / 3600_000);
     throw new Error(
-      `El entorno ya ha agotado su vida máxima (${MAX_TTL_HOURS} h desde su creación). Abre la PR o crea uno nuevo.`,
+      `El entorno ya está extendido al máximo (${describeHours(EXTEND_HORIZON_HOURS)} vista). ` +
+        `Vuelve a extenderlo dentro de ~${wait} h y podrás sumar más.`,
     );
   }
 
   const wanted = from + hours * 3600_000;
-  const capped = wanted > ceiling;
-  const expiresAt = new Date(capped ? ceiling : wanted);
+  const capped = wanted > horizon;
+  const expiresAt = new Date(capped ? horizon : wanted);
 
   await db
     .update(schema.stagingEnvs)
@@ -522,7 +547,7 @@ export async function extendStagingEnv(
     "ttl-extend",
     true,
     capped
-      ? `Caducidad ampliada hasta el techo de vida (${MAX_TTL_HOURS} h): ${stamp}`
+      ? `Caducidad ampliada hasta el tope de ${describeHours(EXTEND_HORIZON_HOURS)} vista: ${stamp}`
       : `Caducidad ampliada +${hours} h: ${stamp}`,
   );
 

@@ -4,6 +4,7 @@ import { db, schema } from "@/lib/db";
 import { hasPermission, requirePermission } from "@/lib/auth/rbac";
 import { Badge, Card, PageHeader, StatusBadge, formatDate, timeAgo, timeUntil } from "@/components/ui";
 import { resolveDevboxHost, type DevboxHost } from "@/lib/staging/devbox";
+import { extendHorizonHours } from "@/lib/staging/orchestrator";
 import { StagingActions } from "./staging-actions";
 import { AutoRefresh } from "./auto-refresh";
 
@@ -130,6 +131,7 @@ export default async function StagingDetailPage({ params }: { params: Promise<{ 
             canMerge={canMerge}
             isOwner={isOwner}
             live={live}
+            horizonHours={extendHorizonHours()}
           />
         </Card>
       </div>

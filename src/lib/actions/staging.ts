@@ -7,6 +7,7 @@ import { assertPermission } from "@/lib/auth/rbac";
 import { createNotification } from "@/lib/notify";
 import {
   destroyStagingEnv,
+  extendHorizonHours,
   extendStagingEnv,
   redeployStagingEnv,
   requestStagingEnv,
@@ -81,7 +82,9 @@ export async function extendStaging(
   hours: number,
 ): Promise<{ expiresAt?: string; capped?: boolean; error?: string }> {
   const user = await assertPermission("staging.view");
-  if (!Number.isInteger(hours) || hours < 1 || hours > 168) return { error: "Duración inválida" };
+  if (!Number.isInteger(hours) || hours < 1 || hours > extendHorizonHours()) {
+    return { error: "Duración inválida" };
+  }
   const [env] = await db.select().from(schema.stagingEnvs).where(eq(schema.stagingEnvs.id, envId));
   if (!env) return { error: "Entorno no encontrado" };
   if (env.requestedBy !== user.id) {
