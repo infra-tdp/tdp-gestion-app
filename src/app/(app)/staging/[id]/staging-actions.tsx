@@ -4,8 +4,13 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { destroyStaging, extendStaging, mergeStagingPr, openStagingPr, redeployStaging } from "@/lib/actions/staging";
 
-/** Prórrogas ofrecidas (horas). El techo total lo pone el servidor (STAGING_MAX_TTL_HOURS). */
-const EXTEND_OPTIONS = [3, 8, 24, 72];
+/** Prórrogas ofrecidas (horas), recortadas al tope de horas vista del servidor. */
+const BASE_EXTEND_OPTIONS = [3, 8, 24, 72];
+
+/** "168" → "7 d"; "30" → "30 h". */
+function fmtHours(hours: number): string {
+  return hours % 24 === 0 && hours >= 24 ? `${hours / 24} d` : `${hours} h`;
+}
 
 export function StagingActions({
   envId,
@@ -15,6 +20,7 @@ export function StagingActions({
   canMerge,
   isOwner,
   live,
+  horizonHours,
 }: {
   envId: number;
   status: string;
@@ -23,12 +29,15 @@ export function StagingActions({
   canMerge: boolean;
   isOwner: boolean;
   live: boolean;
+  /** Tope de horas vista que admite el servidor (STAGING_EXTEND_HORIZON_HOURS). */
+  horizonHours: number;
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [prTitle, setPrTitle] = useState("");
   const [confirmDestroy, setConfirmDestroy] = useState(false);
-  const [extendHours, setExtendHours] = useState(EXTEND_OPTIONS[1]);
+  const extendOptions = [...BASE_EXTEND_OPTIONS.filter((h) => h < horizonHours), horizonHours];
+  const [extendHours, setExtendHours] = useState(extendOptions[Math.min(1, extendOptions.length - 1)]);
   const [extended, setExtended] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -89,9 +98,10 @@ export function StagingActions({
               disabled={pending}
               onChange={(e) => setExtendHours(Number(e.target.value))}
             >
-              {EXTEND_OPTIONS.map((h) => (
+              {extendOptions.map((h) => (
                 <option key={h} value={h}>
-                  +{h} h
+                  +{fmtHours(h)}
+                  {h === horizonHours ? " (máximo)" : ""}
                 </option>
               ))}
             </select>
@@ -100,8 +110,8 @@ export function StagingActions({
             </button>
           </div>
           <p className="text-muted text-[12px] mt-1.5">
-            Se suma a la caducidad actual (o a ahora mismo si ya venció). Hay un tope de vida total desde que se creó
-            el entorno.
+            Se suma a la caducidad actual (o a ahora mismo si ya venció). Nunca se pasa de {fmtHours(horizonHours)}{" "}
+            vista: si ya está en el tope, espera un rato y vuelve a extenderlo.
           </p>
           {extended && <p className="text-primary font-semibold text-[13px] mt-1.5">⏱ {extended}</p>}
         </div>
